@@ -132,6 +132,28 @@
   Sfx.prototype.clear = function () { var f = [523, 659, 784, 1046]; for (var i = 0; i < 4; i++) this.tone(f[i], f[i], 0.16, 'sine', 0.08, i * 0.11); };
   Sfx.prototype.dash = function () { this.tone(180, 420, 0.1, 'triangle', 0.05); };
   Sfx.prototype.ui = function () { this.tone(880, 880, 0.05, 'sine', 0.05); };
+  Sfx.prototype.startAmb = function () {
+    if (!this.ctx || this.amb) return;
+    var c = this.ctx;
+    var g = c.createGain(); g.gain.value = 0.0001; g.connect(c.destination);
+    var o1 = c.createOscillator(); o1.type = 'sine'; o1.frequency.value = 110;
+    var o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = 164.8;
+    var lfo = c.createOscillator(); lfo.frequency.value = 0.07;
+    var lg = c.createGain(); lg.gain.value = 0.005;
+    lfo.connect(lg); lg.connect(g.gain);
+    o1.connect(g); o2.connect(g);
+    g.gain.setTargetAtTime(0.011, c.currentTime, 2);
+    o1.start(); o2.start(); lfo.start();
+    this.amb = { g: g, o1: o1, o2: o2, lfo: lfo };
+  };
+  Sfx.prototype.stopAmb = function () {
+    var a = this.amb; if (!a || !this.ctx) { this.amb = null; return; }
+    this.amb = null;
+    try {
+      a.g.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.3);
+      setTimeout(function () { try { a.o1.stop(); a.o2.stop(); a.lfo.stop(); } catch (e) { } }, 1200);
+    } catch (e) { }
+  };
 
   /* ---------------- Voice chat (WebRTC over relay signaling) ---------------- */
   function Voice(net) {
@@ -268,6 +290,7 @@
     '   <div class="pg-net">오프라인</div>' +
     '  </div>' +
     '  <div class="pg-alertbar"><div class="pg-alertfill"></div></div>' +
+    '  <canvas class="pg-map" width="150" height="100"></canvas>' +
     '  <div class="pg-roster"></div>' +
     '  <div class="pg-objective"></div>' +
     '  <div class="pg-toast"></div>' +
@@ -307,6 +330,7 @@
     '.pg-net.on{color:#ec3013;font-weight:700}' +
     '.pg-alertbar{position:absolute;top:40px;left:0;right:0;height:4px}' +
     '.pg-alertfill{height:100%;width:0%;background:#ec3013;transition:width .1s linear}' +
+    '.pg-map{position:absolute;top:56px;left:12px;border:2px solid #201e1d;background:#f3f2f2;opacity:.94}' +
     '.pg-roster{position:absolute;top:52px;right:12px;display:flex;flex-direction:column;gap:4px;align-items:flex-end}' +
     '.pg-roster .pr{display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;background:rgba(243,242,242,.88);border:1px solid #d8d5d3;padding:4px 8px;color:#3c3937}' +
     '.pg-roster .pr .sq{width:7px;height:7px;background:#8a8683}' +
@@ -362,6 +386,7 @@
     '.pg-seg button:last-child{border-right:0}' +
     '.pg-seg button.sel{background:#201e1d;color:#f3f2f2}' +
     '.pg-seg button:hover:not(.sel){background:rgba(236,48,19,.08)}' +
+    '.pg-seg button:disabled{opacity:.45;cursor:default;background:transparent}' +
     '.pg-row{display:flex;gap:10px;margin-top:4px;flex-wrap:wrap}' +
     '.pg-field{flex:1;min-width:130px}' +
     '.pg-field label{display:block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#8a8683;margin-bottom:5px}' +
@@ -378,7 +403,7 @@
     '.pg-btn.ghost:hover{background:rgba(236,48,19,.08)}' +
     '.pg-btn:focus-visible,.pg-char:focus-visible,.pg-seg button:focus-visible,.pg-tbtn:focus-visible{outline:2px solid #ec3013;outline-offset:2px}' +
     '.pg-hint{font-size:11px;letter-spacing:.06em;color:#8a8683;margin-top:10px;line-height:1.6}' +
-    '@media(max-width:760px){.pg-topbar>div{padding:8px 8px;font-size:10px}.pg-tbtn{padding:0 8px;font-size:10px}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}}';
+    '@media(max-width:760px){.pg-topbar>div{padding:8px 8px;font-size:10px}.pg-tbtn{padding:0 8px;font-size:10px}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}.pg-map{transform:scale(.72);transform-origin:top left}}';
 
   function PG() { return Reflect.construct(HTMLElement, [], PG); }
   PG.prototype = Object.create(HTMLElement.prototype);
@@ -412,6 +437,15 @@
     this.charId = 'pigeon';
     this.diffId = 'normal';
     this.inv = { decoy: 0, smoke: 0 };
+    this.unlock = 0; this.best = {}; this.startStageIdx = 0;
+    try {
+      var pf = JSON.parse(localStorage.getItem('pp_prefs') || '{}');
+      if (CHARS[pf.char]) this.charId = pf.char;
+      if (DIFFS[pf.diff]) this.diffId = pf.diff;
+      if (pf.name) this.savedName = pf.name;
+      this.unlock = Math.min(parseInt(localStorage.getItem('pp_unlock') || '0', 10) || 0, LEVELS.length - 1);
+      this.best = JSON.parse(localStorage.getItem('pp_best') || '{}') || {};
+    } catch (e) { }
     this._syncAttrs();
     var THREE;
     try {
@@ -455,6 +489,15 @@
     this.levelGroup = new T.Group(); scene.add(this.levelGroup);
     this.actorGroup = new T.Group(); scene.add(this.actorGroup);
     this.fxGroup = new T.Group(); scene.add(this.fxGroup);
+    this.parts = [];
+    var arrowMesh = new T.Mesh(new T.ConeGeometry(0.16, 0.5, 3), new T.MeshBasicMaterial({ color: ACCENT }));
+    arrowMesh.rotation.x = Math.PI / 2;
+    arrowMesh.position.set(0, 0.06, 1.7);
+    var arrowG = new T.Group();
+    arrowG.add(arrowMesh);
+    arrowG.visible = false;
+    scene.add(arrowG);
+    this.arrow = arrowG;
     this._spawnPlayer();
     this.peersMeshes = {};
     var ro = new ResizeObserver(function () { self._resize(); });
@@ -668,7 +711,7 @@
         model: pg, cone: cone, bang: bang, path: gd.path, seg: 0,
         speed: gd.speed * D.gs, range: range, fov: fov,
         pos: new T.Vector2(gd.path[0][0], gd.path[0][1]), facing: 0,
-        detect: 0, state: 'patrol', loseT: 0, lureT: 0, lure: null
+        detect: 0, state: 'patrol', loseT: 0, lureT: 0, lure: null, lsx: 0, lsz: 0, searchT: 0
       });
     }
     // reset player
@@ -678,7 +721,10 @@
     this.$('.pg-b-crouch').classList.remove('onn');
     this.moveTarget = null;
     this.filmCount = 0; this.extractT = 0;
+    this.stageTime = 0; this.spotted = 0;
     this.inv = { decoy: D.start.decoy, smoke: D.start.smoke };
+    var mpc = this.$('.pg-map');
+    if (mpc) { mpc.width = 150; mpc.height = Math.max(60, Math.round(150 * L.d / L.w)); }
     this.$('.pg-stage').textContent = L.name;
     this._updFilms(); this._updInv();
     this.$('.pg-objective').textContent = '목표 — 마이크로필름 회수 후 적색 구역으로 탈출';
@@ -868,6 +914,7 @@
     if (now - this.dashT < CHARS[this.charId].dashCd) return;
     this.dashT = now;
     this.sfx.ensure(); this.sfx.dash();
+    if (this.player) this._burst(this.player.pos.x, this.player.pos.y, 0xc9c6c3, 5);
   };
   PG.prototype._useDecoy = function () {
     if (this.mode !== 'play') return;
@@ -896,6 +943,17 @@
     this._toast('연막 전개 — 5초간 은신');
   };
 
+  PG.prototype._burst = function (x, z, color, n) {
+    var T = this.THREE;
+    for (var i = 0; i < (n || 8); i++) {
+      var m = new T.Mesh(new T.BoxGeometry(0.12, 0.12, 0.12), new T.MeshBasicMaterial({ color: color }));
+      m.position.set(x, 0.6, z);
+      var a = Math.random() * Math.PI * 2;
+      this.fxGroup.add(m);
+      this.parts.push({ m: m, vx: Math.sin(a) * (1 + Math.random() * 2), vz: Math.cos(a) * (1 + Math.random() * 2), vy: 2 + Math.random() * 2, t: 0.6 });
+    }
+  };
+
   /* ---------- Overlays ---------- */
   PG.prototype._overlay = function (html) {
     var ov = this.$('.pg-overlay');
@@ -907,6 +965,7 @@
   PG.prototype._showTitle = function () {
     var self = this;
     this.mode = 'menu';
+    this.sfx.stopAmb();
     this._buildLevel(0);
     this._toggleDrawer(false);
     var charBtns = '';
@@ -919,14 +978,22 @@
     for (var did in DIFFS) {
       diffBtns += '<button data-d="' + did + '" class="' + (did === this.diffId ? 'sel' : '') + '">' + DIFFS[did].name + '</button>';
     }
+    if (this.startStageIdx > this.unlock) this.startStageIdx = 0;
+    var stageBtns = '';
+    for (var sI = 0; sI < LEVELS.length; sI++) {
+      var locked = sI > this.unlock;
+      var bst = this.best['s' + sI];
+      stageBtns += '<button data-s="' + sI + '"' + (locked ? ' disabled' : '') + ' class="' + (sI === this.startStageIdx ? 'sel' : '') + '">' + ('0' + (sI + 1)) + (locked ? ' 잠금' : (bst ? ' · ' + bst.rank : '')) + '</button>';
+    }
     this._overlay(
       '<div class="pg-panel"><div class="hd"><span class="k">Classified</span><h1>Pigeon Protocol<br>비둘기 특무</h1></div>' +
       '<div class="bd">' +
       '<div class="pg-lbl">요원 선택</div><div class="pg-chars">' + charBtns + '</div>' +
       '<div class="pg-lbl">난이도</div><div class="pg-seg pg-diff">' + diffBtns + '</div>' +
+      '<div class="pg-lbl">스테이지 (클리어 시 해제 · 최고 랭크)</div><div class="pg-seg pg-stagesel">' + stageBtns + '</div>' +
       '<div class="pg-lbl">신원</div>' +
       '<div class="pg-row">' +
-      '<div class="pg-field"><label>콜사인</label><input class="pg-name" maxlength="10" value="AGENT-' + Math.floor(Math.random() * 90 + 10) + '"></div>' +
+      '<div class="pg-field"><label>콜사인</label><input class="pg-name" maxlength="10" value="' + (this.savedName || ('AGENT-' + Math.floor(Math.random() * 90 + 10))) + '"></div>' +
       '<div class="pg-field"><label>작전 방 코드 (온라인 · 선택)</label><input class="pg-room" maxlength="12" placeholder="예: NEST-7"></div>' +
       '</div>' +
       '<div class="pg-lbl">브리핑</div>' +
@@ -957,6 +1024,14 @@
         self.sfx.ensure(); self.sfx.ui();
       });
     });
+    ov.querySelectorAll('.pg-stagesel button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        self.startStageIdx = parseInt(b.getAttribute('data-s'), 10) || 0;
+        ov.querySelectorAll('.pg-stagesel button').forEach(function (x) { x.classList.toggle('sel', x === b); });
+        self.sfx.ensure(); self.sfx.ui();
+      });
+    });
     this.$('.pg-go').addEventListener('click', function () {
       self.sfx.ensure(); self.sfx.ui();
       var room = (self.$('.pg-room').value || '').trim().toUpperCase();
@@ -964,8 +1039,9 @@
       if (room && self.net.status !== 'on') self.net.connect(room, name);
       else self.net.name = name;
       self.netStatus();
+      try { localStorage.setItem('pp_prefs', JSON.stringify({ char: self.charId, diff: self.diffId, name: name })); } catch (e2) { }
       self._spawnPlayer();
-      self._startStage(0);
+      self._startStage(self.startStageIdx);
     });
   };
 
@@ -985,7 +1061,7 @@
       '<div class="ft"><button class="pg-btn pg-go2">잠입 →</button></div></div>'
     );
     this.$('.pg-go2').addEventListener('click', function () {
-      self.sfx.ensure(); self.sfx.ui();
+      self.sfx.ensure(); self.sfx.ui(); self.sfx.startAmb();
       self._closeOverlay(); self.mode = 'play';
     });
   };
@@ -994,6 +1070,7 @@
     var self = this;
     if (this.mode !== 'play') return;
     this.mode = 'fail';
+    this.sfx.stopAmb();
     this.sfx.fail();
     this._overlay(
       '<div class="pg-panel"><div class="hd"><span class="k">Mission failed</span><h1>발각되었다</h1></div>' +
@@ -1007,11 +1084,34 @@
   PG.prototype._clearStage = function () {
     var self = this;
     this.mode = 'clear';
+    this.sfx.stopAmb();
     this.sfx.clear();
     var last = this.stageIdx >= LEVELS.length - 1;
+    var secs = Math.round(this.stageTime);
+    var mmss = Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
+    var par = [90, 150, 210][this.stageIdx] || 120;
+    var rank = (this.spotted === 0 && secs <= par) ? 'S' : (this.spotted <= 1 && secs <= par * 1.5) ? 'A' : (this.spotted <= 3) ? 'B' : 'C';
+    var order = { S: 4, A: 3, B: 2, C: 1 };
+    try {
+      var key = 's' + this.stageIdx;
+      var prev = this.best[key];
+      if (!prev || order[rank] > order[prev.rank] || (order[rank] === order[prev.rank] && secs < prev.time)) {
+        this.best[key] = { rank: rank, time: secs };
+        localStorage.setItem('pp_best', JSON.stringify(this.best));
+      }
+      if (!last && this.stageIdx + 1 > this.unlock) {
+        this.unlock = this.stageIdx + 1;
+        localStorage.setItem('pp_unlock', String(this.unlock));
+      }
+    } catch (e) { }
     this._overlay(
-      '<div class="pg-panel"><div class="hd"><span class="k">' + (last ? 'All clear' : 'Stage clear') + '</span><h1>' + (last ? '작전 완수' : '탈출 성공') + '</h1></div>' +
-      '<div class="bd"><p>' + (last ? '모든 마이크로필름이 본부로 전달되었다. 훌륭한 비행이었다, 요원.' : '필름 ' + this.level.films.length + '개 회수. 다음 구역으로 이동한다.') + '</p></div>' +
+      '<div class="pg-panel"><div class="hd"><span class="k">' + (last ? 'All clear' : 'Stage clear') + ' · Rank ' + rank + '</span><h1>' + (last ? '작전 완수' : '탈출 성공') + '</h1></div>' +
+      '<div class="bd"><p>' + (last ? '모든 마이크로필름이 본부로 전달되었다. 훌륭한 비행이었다, 요원.' : '필름 ' + this.level.films.length + '개 회수. 다음 구역으로 이동한다.') + '</p>' +
+      '<ul class="pg-rules">' +
+      '<li><b>랭크</b><span>' + rank + '</span></li>' +
+      '<li><b>시간</b><span>' + mmss + '</span></li>' +
+      '<li><b>발각</b><span>' + this.spotted + '회</span></li>' +
+      '</ul></div>' +
       '<div class="ft">' + (last ? '<button class="pg-btn pg-again">처음부터 →</button>' : '<button class="pg-btn pg-next">다음 스테이지 →</button>') + '<button class="pg-btn ghost pg-menu">타이틀로</button></div></div>'
     );
     if (last) this.$('.pg-again').addEventListener('click', function () { self._startStage(0); });
@@ -1115,7 +1215,17 @@
         P.smokeShell.visible = smokeActive;
         if (smokeActive) { P.smokeShell.material.opacity = 0.25 + Math.sin(t * 6) * 0.1; P.smokeShell.rotation.y = t; }
       }
+      for (var pI = self.parts.length - 1; pI >= 0; pI--) {
+        var pp = self.parts[pI];
+        pp.t -= dt;
+        pp.vy -= 8 * dt;
+        pp.m.position.x += pp.vx * dt; pp.m.position.z += pp.vz * dt; pp.m.position.y += pp.vy * dt;
+        pp.m.scale.setScalar(Math.max(pp.t / 0.6, 0.01));
+        if (pp.t <= 0 || pp.m.position.y < 0.02) { self.fxGroup.remove(pp.m); self.parts.splice(pI, 1); }
+      }
+      if (self.mode !== 'play' && self.arrow) self.arrow.visible = false;
       if (self.mode === 'play') {
+        self.stageTime += dt;
         var ix = 0, iz = 0;
         if (self.keys.KeyW || self.keys.ArrowUp) iz -= 1;
         if (self.keys.KeyS || self.keys.ArrowDown) iz += 1;
@@ -1136,6 +1246,7 @@
         P.pos.y += iz * maxSp * dt;
         self._collide(P.pos, 0.5);
         speed = il * maxSp;
+        self._lax = ix * 2.4; self._laz = iz * 2.4;
         if (il > 0.05) {
           var want = Math.atan2(ix, iz);
           var da = want - P.facing;
@@ -1151,6 +1262,7 @@
           fl.core.position.y = 0.8 + Math.sin(t * 2.5 + f) * 0.08;
           if (Math.hypot(fl.x - P.pos.x, fl.z - P.pos.y) < 1.1) {
             fl.got = true; fl.mesh.visible = false;
+            self._burst(fl.x, fl.z, ACCENT, 10);
             self.filmCount++; self._updFilms(); self._updDrawer(); self.sfx.pickup();
             if (self.filmCount === self.films.length) {
               self.$('.pg-objective').textContent = '목표 — 적색 회수 구역으로 탈출하라';
@@ -1165,6 +1277,7 @@
           itm.core.rotation.y = t * 1.6;
           if (Math.hypot(itm.x - P.pos.x, itm.z - P.pos.y) < 1.1) {
             itm.got = true; itm.mesh.visible = false;
+            self._burst(itm.x, itm.z, MID, 8);
             self.inv[itm.t]++;
             self._updInv(); self._updDrawer(); self.sfx.item();
             self._toast(itm.t === 'decoy' ? '미끼 획득 (1키)' : '연막 획득 (2키)');
@@ -1186,6 +1299,24 @@
           self.$('.pg-objective').textContent = '탈출 중… ' + Math.min(100, Math.round(self.extractT / 1.2 * 100)) + '%';
           if (self.extractT > 1.2) self._clearStage();
         } else self.extractT = 0;
+        // objective arrow
+        var atx = null, atz = null;
+        if (!ready) {
+          var bd2 = 1e9;
+          for (var af = 0; af < self.films.length; af++) {
+            var afl = self.films[af];
+            if (afl.got) continue;
+            var ad2 = (afl.x - P.pos.x) * (afl.x - P.pos.x) + (afl.z - P.pos.y) * (afl.z - P.pos.y);
+            if (ad2 < bd2) { bd2 = ad2; atx = afl.x; atz = afl.z; }
+          }
+        } else { atx = ex[0]; atz = ex[1]; }
+        if (self.arrow) {
+          if (atx !== null) {
+            self.arrow.visible = true;
+            self.arrow.position.set(P.pos.x, 0.06, P.pos.y);
+            self.arrow.rotation.y = Math.atan2(atx - P.pos.x, atz - P.pos.y);
+          } else self.arrow.visible = false;
+        }
         // guards
         var maxDetect = 0;
         var hidden = smokeActive || (P.crouch && self._inCover(P.pos.x, P.pos.y));
@@ -1205,10 +1336,38 @@
             self._collide(G.pos, 0.55);
             if (cd < 0.95) self._fail();
             var seeNow = !hidden && self._los(G.pos.x, G.pos.y, P.pos.x, P.pos.y) && cd < G.range * 1.5;
-            if (seeNow) G.loseT = 0; else {
+            if (seeNow) { G.loseT = 0; G.lsx = P.pos.x; G.lsz = P.pos.y; } else {
               G.loseT += dt;
-              if (G.loseT > 2.4) { G.state = 'patrol'; G.detect = 0; G.bang.visible = false; }
+              if (G.loseT > 2.4) { G.state = 'search'; G.searchT = 0; G.detect = 0.4; G.bang.visible = false; }
             }
+          } else if (G.state === 'search') {
+            var sdx = G.lsx - G.pos.x, sdz = G.lsz - G.pos.y;
+            var sd = Math.hypot(sdx, sdz);
+            if (sd > 1) {
+              G.pos.x += (sdx / sd) * G.speed * 1.2 * dt;
+              G.pos.y += (sdz / sd) * G.speed * 1.2 * dt;
+              G.facing = Math.atan2(sdx, sdz);
+              gSpeed = G.speed * 1.2;
+              self._collide(G.pos, 0.55);
+            } else {
+              G.searchT += dt;
+              G.facing += dt * 1.7;
+              if (G.searchT > 3) G.state = 'patrol';
+            }
+            var vdx2 = P.pos.x - G.pos.x, vdz2 = P.pos.y - G.pos.y;
+            var vd2 = Math.hypot(vdx2, vdz2);
+            var seen2 = false;
+            if (!hidden && vd2 < G.range * (P.crouch ? 0.55 : 1) * C.detect) {
+              var ang2 = Math.atan2(vdx2, vdz2) - G.facing;
+              while (ang2 > Math.PI) ang2 -= Math.PI * 2;
+              while (ang2 < -Math.PI) ang2 += Math.PI * 2;
+              if (Math.abs(ang2) < G.fov / 2 && self._los(G.pos.x, G.pos.y, P.pos.x, P.pos.y)) {
+                seen2 = true;
+                G.detect = Math.min(1, G.detect + dt / (D.dt * 0.6));
+                if (G.detect >= 1) { G.state = 'chase'; G.loseT = 0; G.bang.visible = true; self.sfx.alert(); self.spotted++; }
+              }
+            }
+            if (!seen2) G.detect = Math.max(0.15, G.detect - dt / 1.2);
           } else {
             // lure check
             if (G.state !== 'lured' && self.decoys.length) {
@@ -1263,7 +1422,15 @@
             if (inCone) {
               if (G.detect === 0) self.sfx.spotted();
               G.detect = Math.min(1, G.detect + dt / D.dt);
-              if (G.detect >= 1) { G.state = 'chase'; G.loseT = 0; G.bang.visible = true; self.sfx.alert(); }
+              if (G.detect >= 1) {
+                G.state = 'chase'; G.loseT = 0; G.bang.visible = true; self.sfx.alert(); self.spotted++;
+                for (var gJ = 0; gJ < self.guards.length; gJ++) {
+                  var G2 = self.guards[gJ];
+                  if (G2 !== G && G2.state === 'patrol' && Math.hypot(G2.pos.x - G.pos.x, G2.pos.y - G.pos.y) < 16) {
+                    G2.state = 'search'; G2.lsx = P.pos.x; G2.lsz = P.pos.y; G2.searchT = 0; G2.detect = Math.max(G2.detect, 0.3);
+                  }
+                }
+              }
             } else G.detect = Math.max(0, G.detect - dt / 1.2);
           }
           maxDetect = Math.max(maxDetect, G.state === 'chase' ? 1 : G.detect);
@@ -1280,15 +1447,76 @@
       self._animBird(P, speed, dt, P.crouch, t);
       self._updatePeers();
       var cd2 = self.camDist;
-      camPos.set(P.pos.x, cd2, P.pos.y + cd2 * 0.72);
+      var lax = self.mode === 'play' ? (self._lax || 0) : 0;
+      var laz = self.mode === 'play' ? (self._laz || 0) : 0;
+      self.lookX = (self.lookX || 0) + (lax - (self.lookX || 0)) * Math.min(1, dt * 2);
+      self.lookZ = (self.lookZ || 0) + (laz - (self.lookZ || 0)) * Math.min(1, dt * 2);
+      camPos.set(P.pos.x + self.lookX, cd2, P.pos.y + self.lookZ + cd2 * 0.72);
       self.camera.position.lerp(camPos, Math.min(1, dt * 4));
-      self.camera.lookAt(P.pos.x, 0.4, P.pos.y);
+      self.camera.lookAt(P.pos.x + self.lookX * 0.7, 0.4, P.pos.y + self.lookZ * 0.7);
       self.sun.position.set(P.pos.x + 14, 26, P.pos.y + 10);
       self.sun.target.position.set(P.pos.x, 0, P.pos.y);
       self.sun.target.updateMatrixWorld();
+      self._drawMap();
       self.renderer.render(self.scene, self.camera);
     }
     requestAnimationFrame(frame);
+  };
+
+  PG.prototype._drawMap = function () {
+    var mp = this.$('.pg-map');
+    if (!mp || !this.level || !this.walls) return;
+    var L = this.level, c = mp.getContext('2d');
+    var W = mp.width, H = mp.height;
+    var sx = W / L.w, sz = H / L.d;
+    function X(x) { return (x + L.w / 2) * sx; }
+    function Z(z) { return (z + L.d / 2) * sz; }
+    c.fillStyle = '#eceae8'; c.fillRect(0, 0, W, H);
+    c.fillStyle = '#c9c6c3';
+    for (var i = 0; i < this.covers.length; i++) {
+      var cv = this.covers[i];
+      c.fillRect(X(cv.minX), Z(cv.minZ), (cv.maxX - cv.minX) * sx, (cv.maxZ - cv.minZ) * sz);
+    }
+    c.fillStyle = '#201e1d';
+    for (var w = 0; w < this.walls.length; w++) {
+      var wl = this.walls[w];
+      c.fillRect(X(wl.minX), Z(wl.minZ), Math.max(1.5, (wl.maxX - wl.minX) * sx), Math.max(1.5, (wl.maxZ - wl.minZ) * sz));
+    }
+    c.fillStyle = '#ec3013';
+    for (var f = 0; f < this.films.length; f++) {
+      if (this.films[f].got) continue;
+      c.fillRect(X(this.films[f].x) - 2, Z(this.films[f].z) - 2, 4, 4);
+    }
+    c.fillStyle = '#8a8683';
+    for (var it = 0; it < this.items.length; it++) {
+      if (this.items[it].got) continue;
+      c.fillRect(X(this.items[it].x) - 1.5, Z(this.items[it].z) - 1.5, 3, 3);
+    }
+    var ex = L.extract;
+    var ready = this.filmCount === this.films.length;
+    c.strokeStyle = '#ec3013'; c.lineWidth = 1.5;
+    c.strokeRect(X(ex[0] - ex[2] / 2), Z(ex[1] - ex[3] / 2), ex[2] * sx, ex[3] * sz);
+    if (ready && Math.floor(performance.now() / 400) % 2) {
+      c.fillStyle = 'rgba(236,48,19,.5)';
+      c.fillRect(X(ex[0] - ex[2] / 2), Z(ex[1] - ex[3] / 2), ex[2] * sx, ex[3] * sz);
+    }
+    for (var g = 0; g < this.guards.length; g++) {
+      var G = this.guards[g];
+      c.fillStyle = G.state === 'chase' ? '#ec3013' : G.state === 'search' ? '#c92a10' : '#201e1d';
+      c.beginPath(); c.arc(X(G.pos.x), Z(G.pos.y), 2.4, 0, 7); c.fill();
+      c.strokeStyle = 'rgba(32,30,29,.4)'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(X(G.pos.x), Z(G.pos.y));
+      c.lineTo(X(G.pos.x + Math.sin(G.facing) * 3), Z(G.pos.y + Math.cos(G.facing) * 3));
+      c.stroke();
+    }
+    c.fillStyle = '#8a8683';
+    for (var id in this.peersMeshes) {
+      var pm = this.peersMeshes[id];
+      c.beginPath(); c.arc(X(pm.x), Z(pm.z), 2.2, 0, 7); c.fill();
+    }
+    c.fillStyle = '#ec3013';
+    c.strokeStyle = '#f3f2f2'; c.lineWidth = 1.5;
+    c.beginPath(); c.arc(X(this.player.pos.x), Z(this.player.pos.y), 3.2, 0, 7); c.fill(); c.stroke();
   };
 
   PG.prototype._updatePeers = function () {

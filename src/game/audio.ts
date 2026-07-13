@@ -1,9 +1,17 @@
 /** Minimal WebAudio synth — every sound is a single ramped oscillator. */
 type OscType = OscillatorType;
 
+interface Ambient {
+  g: GainNode;
+  o1: OscillatorNode;
+  o2: OscillatorNode;
+  lfo: OscillatorNode;
+}
+
 export class Sfx {
   ctx: AudioContext | null = null;
   muted = false;
+  private amb: Ambient | null = null;
 
   ensure(): void {
     if (!this.ctx) {
@@ -65,5 +73,56 @@ export class Sfx {
   }
   ui(): void {
     this.tone(880, 880, 0.05, 'sine', 0.05);
+  }
+
+  /** Low sustained drone (two detuned sines + slow LFO tremolo) during play. */
+  startAmb(): void {
+    if (!this.ctx || this.amb) return;
+    const c = this.ctx;
+    const g = c.createGain();
+    g.gain.value = 0.0001;
+    g.connect(c.destination);
+    const o1 = c.createOscillator();
+    o1.type = 'sine';
+    o1.frequency.value = 110;
+    const o2 = c.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.value = 164.8;
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 0.07;
+    const lg = c.createGain();
+    lg.gain.value = 0.005;
+    lfo.connect(lg);
+    lg.connect(g.gain);
+    o1.connect(g);
+    o2.connect(g);
+    g.gain.setTargetAtTime(0.011, c.currentTime, 2);
+    o1.start();
+    o2.start();
+    lfo.start();
+    this.amb = { g, o1, o2, lfo };
+  }
+
+  stopAmb(): void {
+    const a = this.amb;
+    if (!a || !this.ctx) {
+      this.amb = null;
+      return;
+    }
+    this.amb = null;
+    try {
+      a.g.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.3);
+      setTimeout(() => {
+        try {
+          a.o1.stop();
+          a.o2.stop();
+          a.lfo.stop();
+        } catch {
+          /* already stopped */
+        }
+      }, 1200);
+    } catch {
+      /* noop */
+    }
   }
 }

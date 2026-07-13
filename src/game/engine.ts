@@ -17,7 +17,18 @@ import { Sfx } from './audio';
 import { Net } from './net';
 import { makeBird, makeBang, makeLabel, animBird } from './birds';
 import { TPL, CSS } from './template';
-import type { Bounds, Decoy, Film, GameOptions, Guard, Item, Player, PeerMesh } from './types';
+import type {
+  BestScore,
+  Bounds,
+  Decoy,
+  Film,
+  GameOptions,
+  Guard,
+  Item,
+  Particle,
+  Player,
+  PeerMesh,
+} from './types';
 
 type Mode = 'menu' | 'brief' | 'play' | 'fail' | 'clear';
 
@@ -56,6 +67,16 @@ export class PigeonGame {
   private extractMesh!: THREE.Mesh;
   private filmCount = 0;
   private extractT = 0;
+  private parts: Particle[] = [];
+  private arrow!: THREE.Group;
+
+  // scoring / progression (persisted in localStorage)
+  private stageTime = 0;
+  private spotted = 0;
+  private unlock = 0;
+  private best: Record<string, BestScore> = {};
+  private startStageIdx = 0;
+  private savedName: string | undefined;
 
   private mode: Mode = 'menu';
   private keys: Record<string, boolean> = {};
@@ -73,12 +94,34 @@ export class PigeonGame {
   private last = 0;
   private camPos = new THREE.Vector3(0, 16, 14);
   private rosterT = 0;
+  private lax = 0;
+  private laz = 0;
+  private lookX = 0;
+  private lookZ = 0;
 
   constructor(host: HTMLElement, opts: GameOptions) {
     this.host = host;
     this.showCones = opts.showCones;
     this.camDist = opts.camDist;
     this.net = new Net(() => this.netStatus());
+    this.loadPrefs();
+  }
+
+  /** Restore saved character/difficulty/callsign, stage unlock and best scores. */
+  private loadPrefs(): void {
+    try {
+      const pf = JSON.parse(localStorage.getItem('pp_prefs') || '{}');
+      if (CHARS[pf.char]) this.charId = pf.char;
+      if (DIFFS[pf.diff]) this.diffId = pf.diff;
+      if (pf.name) this.savedName = pf.name;
+      this.unlock = Math.min(
+        parseInt(localStorage.getItem('pp_unlock') || '0', 10) || 0,
+        LEVELS.length - 1,
+      );
+      this.best = JSON.parse(localStorage.getItem('pp_best') || '{}') || {};
+    } catch {
+      /* first run / storage unavailable */
+    }
   }
 
   private $ = <T extends Element = Element>(s: string): T => this.host.querySelector(s) as T;
@@ -140,6 +183,19 @@ export class PigeonGame {
     scene.add(this.actorGroup);
     this.fxGroup = new THREE.Group();
     scene.add(this.fxGroup);
+
+    this.parts = [];
+    const arrowMesh = new THREE.Mesh(
+      new THREE.ConeGeometry(0.16, 0.5, 3),
+      new THREE.MeshBasicMaterial({ color: ACCENT }),
+    );
+    arrowMesh.rotation.x = Math.PI / 2;
+    arrowMesh.position.set(0, 0.06, 1.7);
+    const arrowG = new THREE.Group();
+    arrowG.add(arrowMesh);
+    arrowG.visible = false;
+    scene.add(arrowG);
+    this.arrow = arrowG;
 
     this.spawnPlayer();
     this.peersMeshes = {};
@@ -368,6 +424,9 @@ export class PigeonGame {
         loseT: 0,
         lureT: 0,
         lure: null,
+        lsx: 0,
+        lsz: 0,
+        searchT: 0,
       });
     }
 
@@ -380,7 +439,14 @@ export class PigeonGame {
     this.moveTarget = null;
     this.filmCount = 0;
     this.extractT = 0;
+    this.stageTime = 0;
+    this.spotted = 0;
     this.inv = { decoy: D.start.decoy, smoke: D.start.smoke };
+    const mpc = this.$<HTMLCanvasElement>('.pg-map');
+    if (mpc) {
+      mpc.width = 150;
+      mpc.height = Math.max(60, Math.round((150 * L.d) / L.w));
+    }
     this.$('.pg-stage').textContent = L.name;
     this.updFilms();
     this.updInv();
@@ -661,6 +727,27 @@ export class PigeonGame {
     this.dashT = now;
     this.sfx.ensure();
     this.sfx.dash();
+    if (this.player) this.burst(this.player.pos.x, this.player.pos.y, 0xc9c6c3, 5);
+  }
+
+  /** Spawn a short-lived cube-debris burst at a ground position. */
+  private burst(x: number, z: number, color: number, n = 8): void {
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.12, 0.12),
+        new THREE.MeshBasicMaterial({ color }),
+      );
+      m.position.set(x, 0.6, z);
+      const a = Math.random() * Math.PI * 2;
+      this.fxGroup.add(m);
+      this.parts.push({
+        m,
+        vx: Math.sin(a) * (1 + Math.random() * 2),
+        vz: Math.cos(a) * (1 + Math.random() * 2),
+        vy: 2 + Math.random() * 2,
+        t: 0.6,
+      });
+    }
   }
   private useDecoy(): void {
     if (this.mode !== 'play') return;
@@ -726,6 +813,7 @@ export class PigeonGame {
 
   private showTitle(): void {
     this.mode = 'menu';
+    this.sfx.stopAmb();
     this.buildLevel(0);
     this.toggleDrawer(false);
 
@@ -763,6 +851,23 @@ export class PigeonGame {
       '">켜짐</button><button data-v="false" class="' +
       (!this.showCones ? 'sel' : '') +
       '">꺼짐</button>';
+    if (this.startStageIdx > this.unlock) this.startStageIdx = 0;
+    let stageBtns = '';
+    for (let sI = 0; sI < LEVELS.length; sI++) {
+      const locked = sI > this.unlock;
+      const bst = this.best['s' + sI];
+      stageBtns +=
+        '<button data-s="' +
+        sI +
+        '"' +
+        (locked ? ' disabled' : '') +
+        ' class="' +
+        (sI === this.startStageIdx ? 'sel' : '') +
+        '">' +
+        ('0' + (sI + 1)) +
+        (locked ? ' 잠금' : bst ? ' · ' + bst.rank : '') +
+        '</button>';
+    }
 
     this.overlay(
       '<div class="pg-panel"><div class="hd"><span class="k">Classified</span><h1>Pigeon Protocol<br>비둘기 특무</h1></div>' +
@@ -772,6 +877,9 @@ export class PigeonGame {
         '</div>' +
         '<div class="pg-lbl">난이도</div><div class="pg-seg pg-diff">' +
         diffBtns +
+        '</div>' +
+        '<div class="pg-lbl">스테이지 (클리어 시 해제 · 최고 랭크)</div><div class="pg-seg pg-stagesel">' +
+        stageBtns +
         '</div>' +
         '<div class="pg-lbl">설정</div>' +
         '<div class="pg-set">' +
@@ -787,8 +895,8 @@ export class PigeonGame {
         '</div>' +
         '<div class="pg-lbl">신원</div>' +
         '<div class="pg-row">' +
-        '<div class="pg-field"><label>콜사인</label><input class="pg-name" maxlength="10" value="AGENT-' +
-        Math.floor(Math.random() * 90 + 10) +
+        '<div class="pg-field"><label>콜사인</label><input class="pg-name" maxlength="10" value="' +
+        (this.savedName || 'AGENT-' + Math.floor(Math.random() * 90 + 10)) +
         '"></div>' +
         '<div class="pg-field"><label>작전 방 코드 (온라인 · 선택)</label><input class="pg-room" maxlength="12" placeholder="예: NEST-7"></div>' +
         '</div>' +
@@ -832,6 +940,15 @@ export class PigeonGame {
         this.sfx.ui();
       });
     });
+    ov.querySelectorAll<HTMLButtonElement>('.pg-stagesel button').forEach((b) => {
+      b.addEventListener('click', () => {
+        if (b.disabled) return;
+        this.startStageIdx = parseInt(b.getAttribute('data-s') || '0', 10) || 0;
+        ov.querySelectorAll('.pg-stagesel button').forEach((x) => x.classList.toggle('sel', x === b));
+        this.sfx.ensure();
+        this.sfx.ui();
+      });
+    });
     const cam = this.$<HTMLInputElement>('.pg-cam');
     const camVal = ov.querySelector('.pg-range .val') as HTMLElement;
     cam.addEventListener('input', () => {
@@ -847,8 +964,16 @@ export class PigeonGame {
       if (room && this.net.status !== 'on') this.net.connect(room, name);
       else this.net.name = name;
       this.netStatus();
+      try {
+        localStorage.setItem(
+          'pp_prefs',
+          JSON.stringify({ char: this.charId, diff: this.diffId, name }),
+        );
+      } catch {
+        /* storage unavailable */
+      }
       this.spawnPlayer();
-      this.startStage(0);
+      this.startStage(this.startStageIdx);
     });
   }
 
@@ -887,6 +1012,7 @@ export class PigeonGame {
     this.$('.pg-go2').addEventListener('click', () => {
       this.sfx.ensure();
       this.sfx.ui();
+      this.sfx.startAmb();
       this.closeOverlay();
       this.mode = 'play';
     });
@@ -895,6 +1021,7 @@ export class PigeonGame {
   private fail(): void {
     if (this.mode !== 'play') return;
     this.mode = 'fail';
+    this.sfx.stopAmb();
     this.sfx.fail();
     this.overlay(
       '<div class="pg-panel"><div class="hd"><span class="k">Mission failed</span><h1>발각되었다</h1></div>' +
@@ -907,11 +1034,44 @@ export class PigeonGame {
 
   private clearStage(): void {
     this.mode = 'clear';
+    this.sfx.stopAmb();
     this.sfx.clear();
     const last = this.stageIdx >= LEVELS.length - 1;
+    const secs = Math.round(this.stageTime);
+    const mmss = Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
+    const par = [90, 150, 210][this.stageIdx] || 120;
+    const rank =
+      this.spotted === 0 && secs <= par
+        ? 'S'
+        : this.spotted <= 1 && secs <= par * 1.5
+          ? 'A'
+          : this.spotted <= 3
+            ? 'B'
+            : 'C';
+    const order: Record<string, number> = { S: 4, A: 3, B: 2, C: 1 };
+    try {
+      const key = 's' + this.stageIdx;
+      const prev = this.best[key];
+      if (
+        !prev ||
+        order[rank] > order[prev.rank] ||
+        (order[rank] === order[prev.rank] && secs < prev.time)
+      ) {
+        this.best[key] = { rank, time: secs };
+        localStorage.setItem('pp_best', JSON.stringify(this.best));
+      }
+      if (!last && this.stageIdx + 1 > this.unlock) {
+        this.unlock = this.stageIdx + 1;
+        localStorage.setItem('pp_unlock', String(this.unlock));
+      }
+    } catch {
+      /* storage unavailable */
+    }
     this.overlay(
       '<div class="pg-panel"><div class="hd"><span class="k">' +
         (last ? 'All clear' : 'Stage clear') +
+        ' · Rank ' +
+        rank +
         '</span><h1>' +
         (last ? '작전 완수' : '탈출 성공') +
         '</h1></div>' +
@@ -919,7 +1079,18 @@ export class PigeonGame {
         (last
           ? '모든 마이크로필름이 본부로 전달되었다. 훌륭한 비행이었다, 요원.'
           : '필름 ' + this.level.films.length + '개 회수. 다음 구역으로 이동한다.') +
-        '</p></div>' +
+        '</p>' +
+        '<ul class="pg-rules">' +
+        '<li><b>랭크</b><span>' +
+        rank +
+        '</span></li>' +
+        '<li><b>시간</b><span>' +
+        mmss +
+        '</span></li>' +
+        '<li><b>발각</b><span>' +
+        this.spotted +
+        '회</span></li>' +
+        '</ul></div>' +
         '<div class="ft">' +
         (last
           ? '<button class="pg-btn pg-again">처음부터 →</button>'
@@ -999,7 +1170,22 @@ export class PigeonGame {
           P.smokeShell.rotation.y = t;
         }
       }
+      for (let pI = this.parts.length - 1; pI >= 0; pI--) {
+        const pp = this.parts[pI];
+        pp.t -= dt;
+        pp.vy -= 8 * dt;
+        pp.m.position.x += pp.vx * dt;
+        pp.m.position.z += pp.vz * dt;
+        pp.m.position.y += pp.vy * dt;
+        pp.m.scale.setScalar(Math.max(pp.t / 0.6, 0.01));
+        if (pp.t <= 0 || pp.m.position.y < 0.02) {
+          this.fxGroup.remove(pp.m);
+          this.parts.splice(pI, 1);
+        }
+      }
+      if (this.mode !== 'play' && this.arrow) this.arrow.visible = false;
       if (this.mode === 'play') {
+        this.stageTime += dt;
         let ix = 0;
         let iz = 0;
         if (this.keys.KeyW || this.keys.ArrowUp) iz -= 1;
@@ -1029,6 +1215,8 @@ export class PigeonGame {
         P.pos.y += iz * maxSp * dt;
         this.collide(P.pos, 0.5);
         speed = il * maxSp;
+        this.lax = ix * 2.4;
+        this.laz = iz * 2.4;
         if (il > 0.05) {
           const want = Math.atan2(ix, iz);
           let da = want - P.facing;
@@ -1045,6 +1233,7 @@ export class PigeonGame {
           if (Math.hypot(fl.x - P.pos.x, fl.z - P.pos.y) < 1.1) {
             fl.got = true;
             fl.mesh.visible = false;
+            this.burst(fl.x, fl.z, ACCENT, 10);
             this.filmCount++;
             this.updFilms();
             this.updDrawer();
@@ -1062,6 +1251,7 @@ export class PigeonGame {
           if (Math.hypot(itm.x - P.pos.x, itm.z - P.pos.y) < 1.1) {
             itm.got = true;
             itm.mesh.visible = false;
+            this.burst(itm.x, itm.z, MID, 8);
             this.inv[itm.t]++;
             this.updInv();
             this.updDrawer();
@@ -1091,6 +1281,33 @@ export class PigeonGame {
             '탈출 중… ' + Math.min(100, Math.round((this.extractT / 1.2) * 100)) + '%';
           if (this.extractT > 1.2) this.clearStage();
         } else this.extractT = 0;
+        // objective arrow — point at nearest un-got film, or the exit once ready
+        let atx: number | null = null;
+        let atz: number | null = null;
+        if (!ready) {
+          let bd2 = 1e9;
+          for (let af = 0; af < this.films.length; af++) {
+            const afl = this.films[af];
+            if (afl.got) continue;
+            const ad2 =
+              (afl.x - P.pos.x) * (afl.x - P.pos.x) + (afl.z - P.pos.y) * (afl.z - P.pos.y);
+            if (ad2 < bd2) {
+              bd2 = ad2;
+              atx = afl.x;
+              atz = afl.z;
+            }
+          }
+        } else {
+          atx = ex[0];
+          atz = ex[1];
+        }
+        if (this.arrow) {
+          if (atx !== null && atz !== null) {
+            this.arrow.visible = true;
+            this.arrow.position.set(P.pos.x, 0.06, P.pos.y);
+            this.arrow.rotation.y = Math.atan2(atx - P.pos.x, atz - P.pos.y);
+          } else this.arrow.visible = false;
+        }
         // guards
         let maxDetect = 0;
         const hidden = smokeActive || (P.crouch && this.inCover(P.pos.x, P.pos.y));
@@ -1113,15 +1330,56 @@ export class PigeonGame {
             if (cd < 0.95) this.fail();
             const seeNow =
               !hidden && this.los(G.pos.x, G.pos.y, P.pos.x, P.pos.y) && cd < G.range * 1.5;
-            if (seeNow) G.loseT = 0;
-            else {
+            if (seeNow) {
+              G.loseT = 0;
+              G.lsx = P.pos.x;
+              G.lsz = P.pos.y;
+            } else {
               G.loseT += dt;
               if (G.loseT > 2.4) {
-                G.state = 'patrol';
-                G.detect = 0;
+                G.state = 'search';
+                G.searchT = 0;
+                G.detect = 0.4;
                 G.bang.visible = false;
               }
             }
+          } else if (G.state === 'search') {
+            // head to the last-seen spot, sweep, then give up after 3s
+            const sdx = G.lsx - G.pos.x;
+            const sdz = G.lsz - G.pos.y;
+            const sd = Math.hypot(sdx, sdz);
+            if (sd > 1) {
+              G.pos.x += (sdx / sd) * G.speed * 1.2 * dt;
+              G.pos.y += (sdz / sd) * G.speed * 1.2 * dt;
+              G.facing = Math.atan2(sdx, sdz);
+              gSpeed = G.speed * 1.2;
+              this.collide(G.pos, 0.55);
+            } else {
+              G.searchT += dt;
+              G.facing += dt * 1.7;
+              if (G.searchT > 3) G.state = 'patrol';
+            }
+            const vdx2 = P.pos.x - G.pos.x;
+            const vdz2 = P.pos.y - G.pos.y;
+            const vd2 = Math.hypot(vdx2, vdz2);
+            let seen2 = false;
+            if (!hidden && vd2 < G.range * (P.crouch ? 0.55 : 1) * C.detect) {
+              let ang2 = Math.atan2(vdx2, vdz2) - G.facing;
+              while (ang2 > Math.PI) ang2 -= Math.PI * 2;
+              while (ang2 < -Math.PI) ang2 += Math.PI * 2;
+              if (Math.abs(ang2) < G.fov / 2 && this.los(G.pos.x, G.pos.y, P.pos.x, P.pos.y)) {
+                seen2 = true;
+                G.detect = Math.min(1, G.detect + dt / (D.dt * 0.6));
+                if (G.detect >= 1) {
+                  G.state = 'chase';
+                  G.loseT = 0;
+                  G.bang.visible = true;
+                  this.sfx.alert();
+                  this.spotted++;
+                }
+              }
+            }
+            if (!seen2) G.detect = Math.max(0.15, G.detect - dt / 1.2);
           } else {
             // lure check
             if (G.state !== 'lured' && this.decoys.length) {
@@ -1192,6 +1450,22 @@ export class PigeonGame {
                 G.loseT = 0;
                 G.bang.visible = true;
                 this.sfx.alert();
+                this.spotted++;
+                // raise the alarm: nearby patrolling guards start searching too
+                for (let gJ = 0; gJ < this.guards.length; gJ++) {
+                  const G2 = this.guards[gJ];
+                  if (
+                    G2 !== G &&
+                    G2.state === 'patrol' &&
+                    Math.hypot(G2.pos.x - G.pos.x, G2.pos.y - G.pos.y) < 16
+                  ) {
+                    G2.state = 'search';
+                    G2.lsx = P.pos.x;
+                    G2.lsz = P.pos.y;
+                    G2.searchT = 0;
+                    G2.detect = Math.max(G2.detect, 0.3);
+                  }
+                }
               }
             } else G.detect = Math.max(0, G.detect - dt / 1.2);
           }
@@ -1210,15 +1484,96 @@ export class PigeonGame {
       animBird(P, speed, dt, P.crouch, t);
       this.updatePeers();
       const cd2 = this.camDist;
-      this.camPos.set(P.pos.x, cd2, P.pos.y + cd2 * 0.72);
+      const lax = this.mode === 'play' ? this.lax : 0;
+      const laz = this.mode === 'play' ? this.laz : 0;
+      this.lookX += (lax - this.lookX) * Math.min(1, dt * 2);
+      this.lookZ += (laz - this.lookZ) * Math.min(1, dt * 2);
+      this.camPos.set(P.pos.x + this.lookX, cd2, P.pos.y + this.lookZ + cd2 * 0.72);
       this.camera.position.lerp(this.camPos, Math.min(1, dt * 4));
-      this.camera.lookAt(P.pos.x, 0.4, P.pos.y);
+      this.camera.lookAt(P.pos.x + this.lookX * 0.7, 0.4, P.pos.y + this.lookZ * 0.7);
       this.sun.position.set(P.pos.x + 14, 26, P.pos.y + 10);
       this.sun.target.position.set(P.pos.x, 0, P.pos.y);
       this.sun.target.updateMatrixWorld();
+      this.drawMap();
       this.renderer.render(this.scene, this.camera);
     };
     this.rafId = requestAnimationFrame(frame);
+  }
+
+  /** 2D minimap: walls, covers, films, items, exit, guards (by state), peers, player. */
+  private drawMap(): void {
+    const mp = this.$<HTMLCanvasElement>('.pg-map');
+    if (!mp || !this.level || !this.walls) return;
+    const L = this.level;
+    const c = mp.getContext('2d');
+    if (!c) return;
+    const W = mp.width;
+    const H = mp.height;
+    const sx = W / L.w;
+    const sz = H / L.d;
+    const X = (x: number) => (x + L.w / 2) * sx;
+    const Z = (z: number) => (z + L.d / 2) * sz;
+    c.fillStyle = '#eceae8';
+    c.fillRect(0, 0, W, H);
+    c.fillStyle = '#c9c6c3';
+    for (const cv of this.covers) {
+      c.fillRect(X(cv.minX), Z(cv.minZ), (cv.maxX - cv.minX) * sx, (cv.maxZ - cv.minZ) * sz);
+    }
+    c.fillStyle = '#201e1d';
+    for (const wl of this.walls) {
+      c.fillRect(
+        X(wl.minX),
+        Z(wl.minZ),
+        Math.max(1.5, (wl.maxX - wl.minX) * sx),
+        Math.max(1.5, (wl.maxZ - wl.minZ) * sz),
+      );
+    }
+    c.fillStyle = '#ec3013';
+    for (const f of this.films) {
+      if (f.got) continue;
+      c.fillRect(X(f.x) - 2, Z(f.z) - 2, 4, 4);
+    }
+    c.fillStyle = '#8a8683';
+    for (const it of this.items) {
+      if (it.got) continue;
+      c.fillRect(X(it.x) - 1.5, Z(it.z) - 1.5, 3, 3);
+    }
+    const ex = L.extract;
+    const ready = this.filmCount === this.films.length;
+    c.strokeStyle = '#ec3013';
+    c.lineWidth = 1.5;
+    c.strokeRect(X(ex[0] - ex[2] / 2), Z(ex[1] - ex[3] / 2), ex[2] * sx, ex[3] * sz);
+    if (ready && Math.floor(performance.now() / 400) % 2) {
+      c.fillStyle = 'rgba(236,48,19,.5)';
+      c.fillRect(X(ex[0] - ex[2] / 2), Z(ex[1] - ex[3] / 2), ex[2] * sx, ex[3] * sz);
+    }
+    for (const G of this.guards) {
+      c.fillStyle =
+        G.state === 'chase' ? '#ec3013' : G.state === 'search' ? '#c92a10' : '#201e1d';
+      c.beginPath();
+      c.arc(X(G.pos.x), Z(G.pos.y), 2.4, 0, 7);
+      c.fill();
+      c.strokeStyle = 'rgba(32,30,29,.4)';
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(X(G.pos.x), Z(G.pos.y));
+      c.lineTo(X(G.pos.x + Math.sin(G.facing) * 3), Z(G.pos.y + Math.cos(G.facing) * 3));
+      c.stroke();
+    }
+    c.fillStyle = '#8a8683';
+    for (const id in this.peersMeshes) {
+      const pm = this.peersMeshes[id];
+      c.beginPath();
+      c.arc(X(pm.x), Z(pm.z), 2.2, 0, 7);
+      c.fill();
+    }
+    c.fillStyle = '#ec3013';
+    c.strokeStyle = '#f3f2f2';
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.arc(X(this.player.pos.x), Z(this.player.pos.y), 3.2, 0, 7);
+    c.fill();
+    c.stroke();
   }
 
   private updatePeers(): void {
@@ -1266,6 +1621,7 @@ export class PigeonGame {
   /** Tear down listeners, RAF and GPU resources when the shell unmounts. */
   dispose(): void {
     cancelAnimationFrame(this.rafId);
+    this.sfx.stopAmb();
     this.resizeObs?.disconnect();
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);

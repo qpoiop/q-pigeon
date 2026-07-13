@@ -14,6 +14,7 @@ export const TPL =
   '   <div class="pg-net">오프라인</div>' +
   '  </div>' +
   '  <div class="pg-alertbar"><div class="pg-alertfill"></div></div>' +
+  '  <canvas class="pg-map" width="150" height="100"></canvas>' +
   '  <div class="pg-roster"></div>' +
   '  <div class="pg-objective"></div>' +
   '  <div class="pg-toast"></div>' +
@@ -53,6 +54,7 @@ export const CSS =
   '.pg-net.on{color:#ec3013;font-weight:700}' +
   '.pg-alertbar{position:absolute;top:40px;left:0;right:0;height:4px}' +
   '.pg-alertfill{height:100%;width:0%;background:#ec3013;transition:width .1s linear}' +
+  '.pg-map{position:absolute;top:56px;left:12px;border:2px solid #201e1d;background:#f3f2f2;opacity:.94}' +
   '.pg-roster{position:absolute;top:52px;right:12px;display:flex;flex-direction:column;gap:4px;align-items:flex-end}' +
   '.pg-roster .pr{display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;background:rgba(243,242,242,.88);border:1px solid #d8d5d3;padding:4px 8px;color:#3c3937}' +
   '.pg-roster .pr .sq{width:7px;height:7px;background:#8a8683}' +
@@ -108,6 +110,7 @@ export const CSS =
   '.pg-seg button:last-child{border-right:0}' +
   '.pg-seg button.sel{background:#201e1d;color:#f3f2f2}' +
   '.pg-seg button:hover:not(.sel){background:rgba(236,48,19,.08)}' +
+  '.pg-seg button:disabled{opacity:.45;cursor:default;background:transparent}' +
   '.pg-row{display:flex;gap:10px;margin-top:4px;flex-wrap:wrap}' +
   '.pg-field{flex:1;min-width:130px}' +
   '.pg-field label{display:block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#8a8683;margin-bottom:5px}' +
@@ -138,4 +141,4 @@ export const CSS =
   '.pg-btn.ghost:hover{background:rgba(236,48,19,.08)}' +
   '.pg-btn:focus-visible,.pg-char:focus-visible,.pg-seg button:focus-visible,.pg-toggle button:focus-visible,.pg-tbtn:focus-visible{outline:2px solid #ec3013;outline-offset:2px}' +
   '.pg-hint{font-size:11px;letter-spacing:.06em;color:#8a8683;margin-top:10px;line-height:1.6}' +
-  '@media(max-width:760px){.pg-topbar>div{padding:8px 8px;font-size:10px}.pg-tbtn{padding:0 8px;font-size:10px}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}}';
+  '@media(max-width:760px){.pg-topbar>div{padding:8px 8px;font-size:10px}.pg-tbtn{padding:0 8px;font-size:10px}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}.pg-map{transform:scale(.72);transform-origin:top left}}';

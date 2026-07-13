@@ -25,7 +25,7 @@ export interface Player extends Bird {
   smokeShell?: THREE.Mesh;
 }
 
-export type GuardState = 'patrol' | 'chase' | 'lured';
+export type GuardState = 'patrol' | 'chase' | 'lured' | 'search';
 
 export interface Guard {
   model: Bird;
@@ -43,6 +43,26 @@ export interface Guard {
   loseT: number;
   lureT: number;
   lure: Decoy | null;
+  /** Last-seen player position, chased down while in the `search` state. */
+  lsx: number;
+  lsz: number;
+  /** Seconds spent searching the last-seen spot before giving up. */
+  searchT: number;
+}
+
+/** A short-lived debris cube thrown by pickups / dashes. */
+export interface Particle {
+  m: THREE.Mesh;
+  vx: number;
+  vy: number;
+  vz: number;
+  t: number;
+}
+
+/** Per-stage best result, persisted in localStorage. */
+export interface BestScore {
+  rank: string;
+  time: number;
 }
 
 export interface Film {
