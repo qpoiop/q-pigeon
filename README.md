@@ -1,25 +1,120 @@
-# CODING AGENTS: READ THIS FIRST
+# PIGEON PROTOCOL — 비둘기 특무
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+탑다운 3D 잠입 전략 게임. 전서구(스파이 비둘기) 요원이 모노크롬 시설에 잠입해
+마이크로필름을 회수하고 적색 회수 구역으로 탈출한다. Modernist 팔레트
+(화이트 / 잉크 / 레드), 절차적 캐릭터 애니메이션, 무료 공개 릴레이 기반의 온라인
+동시 접속 + P2P 음성채팅.
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+Three.js로 렌더링하며 **Vite + React + TypeScript** 웹앱으로 구성되어 실제 배포와
+콘텐츠 확장(요원·스테이지 추가, 데이터 관리)에 적합하도록 만들어졌다.
 
-## What you should do — IMPORTANT
+---
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+## 실행
 
-**Read `project/Pigeon Protocol.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+```bash
+npm install
+npm run dev        # http://localhost:5173 개발 서버
+```
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+빌드 / 미리보기 / 타입체크:
 
-## About the design files
+```bash
+npm run build      # tsc -b && vite build → dist/
+npm run preview    # 빌드 결과 로컬 서빙
+npm run typecheck  # 타입만 검사
+```
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+`dist/`는 정적 파일이며 어떤 정적 호스팅(GitHub Pages, Netlify, S3 등)에도 그대로
+올릴 수 있다. `vite.config.ts`의 `base: './'` 덕분에 하위 경로에서도 동작한다.
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+---
 
-## Bundle contents
+## 게임플레이
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `3D 웹 게임 제작 요청` project files (HTML prototypes, assets, components)
+- **목표** — 스테이지의 마이크로필름을 전부 회수하면 적색 회수 구역이 열린다.
+  회수 구역에 잠시 머무르면 탈출, 다음 스테이지로.
+- **발각** — 경비의 시야콘 안에 들어가면 감지 게이지가 찬다. 게이지가 가득 차면
+  추격당하고, 붙잡히면 스테이지 재시작.
+- **은신** — `숨기(C)`로 느리게 이동하며 덜 띄고, 회색 은폐 구역에서 웅크리면 완전
+  은신. `연막(2)`은 5초 완전 은신, `미끼(1)`는 경비를 그 자리로 유인.
+
+### 조작
+
+| 입력 | 동작 |
+| --- | --- |
+| `WASD` / 화살표 / 바닥 클릭 / 모바일 조이스틱 | 이동 |
+| `C` 또는 `Ctrl` | 숨기(웅크리기) 토글 |
+| `Shift` 또는 `Space` | 대시 |
+| `1` / `2` | 미끼 / 연막 사용 |
+| `Tab` 또는 `M` | 임무 파일(체크리스트·장비·참가자) |
+| 상단 `MIC` 버튼 | 음성채팅 켜기/음소거 |
+
+### 요원 · 난이도 · 온라인
+
+- **요원 3종** — 비둘기(균형) · 까치(속도형, 눈에 잘 띔) · 부엉이(은신형, 경비 시야 축소).
+- **난이도 3단계** — 쉬움 / 보통 / 어려움 (경비 속도·시야·발각 속도·시작 장비 차등).
+- **온라인** — 타이틀에서 같은 방 코드를 입력한 요원들이 서로 보이고, MIC로 P2P
+  음성채팅이 연결된다. 무료 공개 릴레이(socketsbay 데모 채널)라 불안정할 수 있으며,
+  방 코드를 비우면 싱글 작전으로 진행된다.
+- **타이틀 설정** — 경비 시야콘 표시 토글과 카메라 거리(11–24m) 슬라이더.
+
+---
+
+## 구조
+
+```
+index.html                     앱 진입점 (Archivo 폰트 로드)
+src/
+  main.tsx                     React 루트
+  App.tsx                      기본 옵션으로 게임 마운트
+  react/PigeonGame.tsx         엔진을 감싸 마운트/정리하는 React 컴포넌트
+  data/                        ── 콘텐츠 데이터 (확장 지점) ──
+    palette.ts                 Modernist 색상
+    characters.ts              CHARS — 요원 정의
+    difficulties.ts            DIFFS — 난이도 프리셋
+    levels.ts                  LEVELS — 스테이지(맵/경비/필름/아이템)
+  game/                        ── 엔진 ──
+    engine.ts                  PigeonGame 클래스 (씬·시뮬레이션·HUD·루프)
+    birds.ts                   비둘기 모델 빌더 + 절차적 애니메이션
+    audio.ts                   WebAudio 미니멀 신스 (Sfx)
+    net.ts                     공개 릴레이 접속/프레즌스 (Net)
+    voice.ts                   WebRTC P2P 음성 (Voice)
+    template.ts                HUD 마크업 + 컴포넌트 CSS
+    types.ts                   런타임 엔티티 타입
+  styles/
+    modernist.css              Modernist 디자인 시스템 토큰/기본 타입
+    index.css                  전역 리셋
+```
+
+렌더링·시뮬레이션 로직은 프레임워크에 독립적인 `PigeonGame` 클래스에 들어 있고,
+React는 마운트 대상 `<div>`를 만들어 엔진을 붙이고 언마운트 시 `dispose()`로
+정리만 한다. 덕분에 게임 코어는 React에 묶이지 않는다.
+
+### 콘텐츠 확장
+
+모든 정적 콘텐츠는 `src/data/`의 타입이 붙은 모듈에 있다 — 게임 코드를 건드리지
+않고 데이터만 추가하면 된다.
+
+- **새 요원(모델) 추가** — `characters.ts`의 `CHARS`에 항목을 추가한다. `kind`는
+  실루엣 변형(`pigeon`/`magpie`/`owl`)을, `pal`은 색을, `speed`/`detect`/`dashCd`는
+  능력치를 정한다. 완전히 새로운 실루엣이 필요하면 `game/birds.ts`에 `kind` 분기를
+  추가한다.
+- **새 스테이지 추가** — `levels.ts`의 `LEVELS`에 맵 크기·벽·은폐·필름·아이템·경비
+  순찰 경로를 담은 항목을 추가한다.
+- **새 난이도** — `difficulties.ts`의 `DIFFS`에 프리셋을 추가한다.
+
+메뉴/로스터/드로어는 이 데이터를 순회하므로 새 항목은 UI에 자동 반영된다.
+
+---
+
+## 디자인 원본
+
+이 저장소는 Claude Design 핸드오프에서 시작됐다. 원본 프로토타입과 대화 기록은
+참고용으로 보존되어 있다:
+
+- `chats/` — 디자인 어시스턴트와의 대화(요구사항이 여기 있다).
+- `project/` — 원본 HTML/CSS/JS 프로토타입과 Modernist 디자인 시스템 번들.
+
+구현은 이 프로토타입을 픽셀 단위로 재현하되, 실제 배포·확장이 가능한 웹앱 구조로
+재구성한 것이다.

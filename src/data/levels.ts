@@ -1,0 +1,187 @@
+/** Static level definitions. Add an entry to ship a new stage. */
+export type ItemType = 'decoy' | 'smoke';
+
+/** An axis-aligned rectangle in world space (metres), used for walls & covers. */
+export interface Rect {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+}
+
+export interface ItemSpawn {
+  t: ItemType;
+  x: number;
+  z: number;
+}
+
+export interface GuardSpawn {
+  /** Patrol waypoints as [x, z] pairs. */
+  path: [number, number][];
+  /** Patrol speed (m/s). */
+  speed: number;
+  /** Base vision range (m), before difficulty scaling. */
+  range: number;
+}
+
+export interface LevelDef {
+  name: string;
+  /** Playfield width / depth (m). */
+  w: number;
+  d: number;
+  /** Mission briefing text (Korean). */
+  brief: string;
+  /** Player spawn [x, z]. */
+  spawn: [number, number];
+  /** Extraction zone [x, z, width, depth]. */
+  extract: [number, number, number, number];
+  walls: Rect[];
+  covers: Rect[];
+  /** Microfilm pickup positions [x, z]. */
+  films: [number, number][];
+  items: ItemSpawn[];
+  guards: GuardSpawn[];
+}
+
+export const LEVELS: LevelDef[] = [
+  {
+    name: '01 — 외곽 훈련 구역',
+    w: 60,
+    d: 40,
+    brief:
+      '외곽 감시 시설. 마이크로필름 4개를 회수하고 북쪽 회수 지점으로 탈출하라. 회색 은폐 구역과 아이템을 활용할 것.',
+    spawn: [0, 17],
+    extract: [0, -17, 5, 3.5],
+    walls: [
+      { x: -15, z: 8, w: 14, d: 1.4 },
+      { x: 15, z: 8, w: 14, d: 1.4 },
+      { x: -24, z: -2, w: 1.4, d: 14 },
+      { x: 24, z: -2, w: 1.4, d: 14 },
+      { x: 0, z: 2, w: 1.4, d: 10 },
+      { x: -10, z: -8, w: 12, d: 1.4 },
+      { x: 12, z: -8, w: 10, d: 1.4 },
+      { x: -6, z: 14, w: 1.4, d: 5 },
+    ],
+    covers: [
+      { x: -27, z: 13, w: 3.5, d: 4 },
+      { x: 27, z: 13, w: 3.5, d: 4 },
+      { x: 9, z: 3, w: 4, d: 3 },
+      { x: -18, z: -13, w: 4, d: 3 },
+      { x: 18, z: -13, w: 4, d: 3 },
+      { x: 4, z: -4, w: 3, d: 3 },
+    ],
+    films: [
+      [-27, -17],
+      [27, -17],
+      [-27, 3],
+      [27, 3],
+    ],
+    items: [
+      { t: 'decoy', x: -10, z: 13 },
+      { t: 'smoke', x: 10, z: -13 },
+    ],
+    guards: [
+      { path: [[-18, 4], [18, 4]], speed: 2.2, range: 8 },
+      { path: [[-20, -12], [-2, -12]], speed: 2.3, range: 8 },
+      { path: [[20, -12], [5, -12], [5, -2]], speed: 2.3, range: 8 },
+    ],
+  },
+  {
+    name: '02 — 기록 보관소',
+    w: 76,
+    d: 50,
+    brief:
+      '거대한 서고. 필름 5개 회수 후 남동쪽 하수구로 탈출. 경비 순찰선이 겹친다 — 미끼로 흐트러뜨려라.',
+    spawn: [-34, 21],
+    extract: [34, -21, 5, 4],
+    walls: [
+      { x: -14, z: 12, w: 22, d: 1.4 },
+      { x: 14, z: 12, w: 22, d: 1.4 },
+      { x: -28, z: 0, w: 1.4, d: 16 },
+      { x: 28, z: 0, w: 1.4, d: 16 },
+      { x: -10, z: -6, w: 16, d: 1.4 },
+      { x: 12, z: -6, w: 1.4, d: 16 },
+      { x: -2, z: -16, w: 18, d: 1.4 },
+      { x: 22, z: -16, w: 8, d: 1.4 },
+      { x: 0, z: 20, w: 1.4, d: 8 },
+    ],
+    covers: [
+      { x: -34, z: 10, w: 3.5, d: 4 },
+      { x: 4, z: 16, w: 4, d: 3 },
+      { x: 34, z: 10, w: 3.5, d: 4 },
+      { x: -20, z: -11, w: 4, d: 3 },
+      { x: 20, z: 2, w: 4, d: 3 },
+      { x: 0, z: -21, w: 4, d: 3 },
+    ],
+    films: [
+      [-34, -21],
+      [-2, 6],
+      [34, 21],
+      [22, -11],
+      [-14, -21],
+    ],
+    items: [
+      { t: 'decoy', x: -24, z: 6 },
+      { t: 'decoy', x: 14, z: 17 },
+      { t: 'smoke', x: 2, z: -11 },
+    ],
+    guards: [
+      { path: [[-22, 6], [8, 6]], speed: 2.4, range: 8.5 },
+      { path: [[10, 17], [30, 17], [30, 6]], speed: 2.4, range: 8.5 },
+      { path: [[-22, -11], [4, -11], [4, -21]], speed: 2.5, range: 8.5 },
+      { path: [[16, -21], [32, -21], [32, -9]], speed: 2.5, range: 8.5 },
+    ],
+  },
+  {
+    name: '03 — 중앙 관제',
+    w: 90,
+    d: 60,
+    brief: '심장부다. 필름 6개, 경비 6명. 순찰이 빠르고 시야가 넓다. 조용히, 확실하게.',
+    spawn: [0, 26],
+    extract: [0, -26, 6, 4],
+    walls: [
+      { x: -20, z: 16, w: 20, d: 1.4 },
+      { x: 20, z: 16, w: 20, d: 1.4 },
+      { x: -34, z: 2, w: 1.4, d: 20 },
+      { x: 34, z: 2, w: 1.4, d: 20 },
+      { x: -12, z: -2, w: 1.4, d: 12 },
+      { x: 12, z: -2, w: 1.4, d: 12 },
+      { x: 0, z: 8, w: 14, d: 1.4 },
+      { x: -20, z: -14, w: 16, d: 1.4 },
+      { x: 20, z: -14, w: 16, d: 1.4 },
+      { x: 0, z: -20, w: 1.4, d: 6 },
+    ],
+    covers: [
+      { x: -40, z: 22, w: 4, d: 4 },
+      { x: 40, z: 22, w: 4, d: 4 },
+      { x: 0, z: 20, w: 4, d: 3 },
+      { x: -28, z: -8, w: 4, d: 3 },
+      { x: 28, z: -8, w: 4, d: 3 },
+      { x: 0, z: -9, w: 3, d: 3 },
+      { x: -16, z: -24, w: 4, d: 3 },
+      { x: 16, z: -24, w: 4, d: 3 },
+    ],
+    films: [
+      [-40, -26],
+      [40, -26],
+      [-40, 8],
+      [40, 8],
+      [0, 2],
+      [24, 26],
+    ],
+    items: [
+      { t: 'decoy', x: -30, z: 20 },
+      { t: 'smoke', x: 30, z: 20 },
+      { t: 'decoy', x: 0, z: -15 },
+      { t: 'smoke', x: -24, z: -26 },
+    ],
+    guards: [
+      { path: [[-14, 22], [14, 22]], speed: 2.7, range: 9 },
+      { path: [[-28, 12], [-28, -8], [-16, -8]], speed: 2.6, range: 9 },
+      { path: [[28, 12], [28, -8], [16, -8]], speed: 2.6, range: 9 },
+      { path: [[-26, -18], [-26, -26], [-6, -26]], speed: 2.7, range: 9 },
+      { path: [[26, -18], [26, -26], [6, -26]], speed: 2.7, range: 9 },
+      { path: [[-6, 2], [6, 2], [6, -5], [-6, -5]], speed: 3.0, range: 9 },
+    ],
+  },
+];

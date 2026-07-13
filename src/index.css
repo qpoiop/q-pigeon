@@ -1,0 +1,22 @@
+/* Global reset — mirrors the original .dc.html <helmet> <style>. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #f3f2f2;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
+  background: #f3f2f2;
+}
+
+a {
+  color: #ec3013;
+}
+a:hover {
+  color: #c92a10;
+}
