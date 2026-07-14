@@ -706,6 +706,7 @@ export class PigeonGame {
       const pt = new THREE.Vector3();
       if (this.raycaster.ray.intersectPlane(this.groundPlane, pt)) {
         this.moveTarget = new THREE.Vector2(pt.x, pt.z);
+        this.burst(pt.x, pt.z, ACCENT, 4); // confirm exactly where the tap landed
       }
     });
 
@@ -1730,7 +1731,11 @@ export class PigeonGame {
       this.updatePeers();
       // zoom punch eases the camera in on impact, then relaxes back out
       if (this.zoomKick > 0.001) this.zoomKick = Math.max(0, this.zoomKick - realDt * 4);
-      const cd2 = this.camDist - this.zoomKick;
+      // portrait screens have a narrow horizontal FOV (vertical fov is fixed), so
+      // pull the camera back so mobile isn't cramped. Landscape (aspect>=1) is unaffected.
+      const aspect = this.camera.aspect || 1;
+      const fit = aspect < 1 ? Math.min(1.9, Math.pow(1 / aspect, 0.6)) : 1;
+      const cd2 = (this.camDist - this.zoomKick) * fit;
       const lax = this.mode === 'play' ? this.lax : 0;
       const laz = this.mode === 'play' ? this.laz : 0;
       this.lookX += (lax - this.lookX) * Math.min(1, dt * 2);
