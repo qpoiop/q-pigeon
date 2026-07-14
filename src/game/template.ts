@@ -141,4 +141,7 @@ export const CSS =
   '.pg-btn.ghost:hover{background:rgba(236,48,19,.08)}' +
   '.pg-btn:focus-visible,.pg-char:focus-visible,.pg-seg button:focus-visible,.pg-toggle button:focus-visible,.pg-tbtn:focus-visible{outline:2px solid #ec3013;outline-offset:2px}' +
   '.pg-hint{font-size:11px;letter-spacing:.06em;color:#8a8683;margin-top:10px;line-height:1.6}' +
-  '@media(max-width:760px){.pg-topbar>div{padding:8px 8px;font-size:10px}.pg-tbtn{padding:0 8px;font-size:10px}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}.pg-map{transform:scale(.72);transform-origin:top left}}';
+  '@media(max-width:760px){.pg-topbar{overflow:hidden}.pg-topbar>div,.pg-tbtn{padding:8px 8px;font-size:10px;letter-spacing:.05em;gap:5px}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}.pg-map{transform:scale(.72);transform-origin:top left}}' +
+  // very narrow phones: drop non-essential topbar items so it never overflows.
+  // (>.pg-* prefixes are needed to outrank the base `.pg-topbar>div` rule.)
+  '@media(max-width:520px){.pg-topbar>div,.pg-tbtn{padding:7px 7px;font-size:9px;letter-spacing:.02em;gap:4px}.pg-topbar>.pg-brand{font-size:0;padding:7px 9px}.pg-topbar>.pg-stage,.pg-topbar>.pg-inv{display:none}.pg-topbar>.pg-net{max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}';
