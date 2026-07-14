@@ -19,6 +19,7 @@ import { makeBird, makeBang, makeLabel, animBird } from './birds';
 import { clamp, angleDelta } from './anim';
 import { NavGrid } from './ai/navgrid';
 import { findPath } from './ai/pathfind';
+import { searchPoint, flankPoint } from './ai/squad';
 import { TPL, CSS } from './template';
 import type {
   BestScore,
@@ -73,6 +74,10 @@ export class PigeonGame {
   private extractT = 0;
   private parts: Particle[] = [];
   private arrow!: THREE.Group;
+
+  // shared squad alarm — most recent known player location (for coordinated search)
+  private alarmX = 0;
+  private alarmZ = 0;
 
   // scoring / progression (persisted in localStorage)
   private stageTime = 0;
@@ -1362,6 +1367,16 @@ export class PigeonGame {
         let maxDetect = 0;
         const hidden = smokeActive || (P.crouch && this.inCover(P.pos.x, P.pos.y));
         const D = DIFFS[this.diffId];
+        // squad coordination: stable slots so searchers fan out and chasers flank.
+        // nearest chaser gets slot 0 (direct pursuit); the rest cut off escape.
+        const chasers = this.guards
+          .filter((g) => g.state === 'chase')
+          .sort(
+            (a, b) =>
+              Math.hypot(a.pos.x - P.pos.x, a.pos.y - P.pos.y) -
+              Math.hypot(b.pos.x - P.pos.x, b.pos.y - P.pos.y),
+          );
+        const searchers = this.guards.filter((g) => g.state === 'search');
         for (let gI = 0; gI < this.guards.length; gI++) {
           const G = this.guards[gI];
           let gSpeed = 0;
@@ -1369,7 +1384,8 @@ export class PigeonGame {
             const cdx = P.pos.x - G.pos.x;
             const cdz = P.pos.y - G.pos.y;
             const cd = Math.hypot(cdx, cdz);
-            const wp = this.guardWaypoint(G, P.pos.x, P.pos.y, dt);
+            const fg = flankPoint(P.pos.x, P.pos.y, this.lax, this.laz, chasers.indexOf(G), chasers.length);
+            const wp = this.guardWaypoint(G, fg.x, fg.z, dt);
             const mdx = wp.x - G.pos.x;
             const mdz = wp.z - G.pos.y;
             const md = Math.hypot(mdx, mdz);
@@ -1395,15 +1411,24 @@ export class PigeonGame {
                 G.searchT = 0;
                 G.detect = 0.4;
                 G.bang.visible = false;
+                this.alarmX = G.lsx;
+                this.alarmZ = G.lsz;
               }
             }
           } else if (G.state === 'search') {
-            // head to the last-seen spot, sweep, then give up after 3s
-            const sdx = G.lsx - G.pos.x;
-            const sdz = G.lsz - G.pos.y;
+            // coordinated sweep: each searcher gets a distinct point around the alarm
+            const sp2 = searchPoint(
+              this.alarmX,
+              this.alarmZ,
+              searchers.indexOf(G),
+              searchers.length,
+              6,
+            );
+            const sdx = sp2.x - G.pos.x;
+            const sdz = sp2.z - G.pos.y;
             const sd = Math.hypot(sdx, sdz);
             if (sd > 1) {
-              const wp = this.guardWaypoint(G, G.lsx, G.lsz, dt);
+              const wp = this.guardWaypoint(G, sp2.x, sp2.z, dt);
               const mdx = wp.x - G.pos.x;
               const mdz = wp.z - G.pos.y;
               const md = Math.hypot(mdx, mdz) || 1;
@@ -1434,6 +1459,8 @@ export class PigeonGame {
                   G.bang.visible = true;
                   this.sfx.alert();
                   this.spotted++;
+                  this.alarmX = P.pos.x;
+                  this.alarmZ = P.pos.y;
                 }
               }
             }
@@ -1515,6 +1542,8 @@ export class PigeonGame {
                 G.bang.visible = true;
                 this.sfx.alert();
                 this.spotted++;
+                this.alarmX = P.pos.x;
+                this.alarmZ = P.pos.y;
                 // raise the alarm: nearby patrolling guards start searching too
                 for (let gJ = 0; gJ < this.guards.length; gJ++) {
                   const G2 = this.guards[gJ];
