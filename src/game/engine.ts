@@ -16,6 +16,8 @@ import { LEVELS, type LevelDef } from '../data/levels';
 import { Sfx } from './audio';
 import { Net } from './net';
 import { makeBird, makeBang, makeLabel, animBird } from './birds';
+import { NavGrid } from './ai/navgrid';
+import { findPath } from './ai/pathfind';
 import { TPL, CSS } from './template';
 import type {
   BestScore,
@@ -64,6 +66,7 @@ export class PigeonGame {
   private decoys: Decoy[] = [];
   private walls: Bounds[] = [];
   private covers: Bounds[] = [];
+  private nav!: NavGrid;
   private extractMesh!: THREE.Mesh;
   private filmCount = 0;
   private extractT = 0;
@@ -316,6 +319,9 @@ export class PigeonGame {
       });
     }
 
+    // Guard navigation grid, built from the interior walls (radius-inflated).
+    this.nav = new NavGrid(L.w / 2, L.d / 2, this.walls, 1, 0.55);
+
     for (let f = 0; f < L.films.length; f++) {
       const fp = L.films[f];
       const fg = new THREE.Group();
@@ -427,6 +433,11 @@ export class PigeonGame {
         lsx: 0,
         lsz: 0,
         searchT: 0,
+        navPath: null,
+        navIdx: 0,
+        repathT: 0,
+        goalX: 0,
+        goalZ: 0,
       });
     }
 
@@ -1145,6 +1156,37 @@ export class PigeonGame {
     }
   }
 
+  /**
+   * Next point a guard should steer toward to reach (gx,gz) without walking
+   * through walls. Straight line when there's clear line-of-sight; otherwise
+   * an A* route is cached and followed, recomputed periodically or when the
+   * goal moves. Keeps chases feeling direct in the open, correct around walls.
+   */
+  private guardWaypoint(G: Guard, gx: number, gz: number, dt: number): { x: number; z: number } {
+    G.repathT -= dt;
+    if (this.los(G.pos.x, G.pos.y, gx, gz)) {
+      G.navPath = null;
+      return { x: gx, z: gz };
+    }
+    const goalMoved = Math.hypot(gx - G.goalX, gz - G.goalZ) > 2;
+    if (!G.navPath || G.repathT <= 0 || goalMoved) {
+      G.navPath = findPath(this.nav, G.pos.x, G.pos.y, gx, gz);
+      G.navIdx = 0;
+      G.repathT = 0.4;
+      G.goalX = gx;
+      G.goalZ = gz;
+    }
+    const path = G.navPath;
+    if (!path || !path.length) return { x: gx, z: gz };
+    while (
+      G.navIdx < path.length - 1 &&
+      Math.hypot(path[G.navIdx].x - G.pos.x, path[G.navIdx].z - G.pos.y) < 0.7
+    ) {
+      G.navIdx++;
+    }
+    return path[G.navIdx];
+  }
+
   /* ---------- Main loop ---------- */
   private loop(): void {
     this.last = performance.now();
@@ -1319,11 +1361,15 @@ export class PigeonGame {
             const cdx = P.pos.x - G.pos.x;
             const cdz = P.pos.y - G.pos.y;
             const cd = Math.hypot(cdx, cdz);
-            if (cd > 0.01) {
+            const wp = this.guardWaypoint(G, P.pos.x, P.pos.y, dt);
+            const mdx = wp.x - G.pos.x;
+            const mdz = wp.z - G.pos.y;
+            const md = Math.hypot(mdx, mdz);
+            if (md > 0.01) {
               const sp = G.speed * 1.65;
-              G.pos.x += (cdx / cd) * sp * dt;
-              G.pos.y += (cdz / cd) * sp * dt;
-              G.facing = Math.atan2(cdx, cdz);
+              G.pos.x += (mdx / md) * sp * dt;
+              G.pos.y += (mdz / md) * sp * dt;
+              G.facing = Math.atan2(mdx, mdz);
               gSpeed = sp;
             }
             this.collide(G.pos, 0.55);
@@ -1349,9 +1395,13 @@ export class PigeonGame {
             const sdz = G.lsz - G.pos.y;
             const sd = Math.hypot(sdx, sdz);
             if (sd > 1) {
-              G.pos.x += (sdx / sd) * G.speed * 1.2 * dt;
-              G.pos.y += (sdz / sd) * G.speed * 1.2 * dt;
-              G.facing = Math.atan2(sdx, sdz);
+              const wp = this.guardWaypoint(G, G.lsx, G.lsz, dt);
+              const mdx = wp.x - G.pos.x;
+              const mdz = wp.z - G.pos.y;
+              const md = Math.hypot(mdx, mdz) || 1;
+              G.pos.x += (mdx / md) * G.speed * 1.2 * dt;
+              G.pos.y += (mdz / md) * G.speed * 1.2 * dt;
+              G.facing = Math.atan2(mdx, mdz);
               gSpeed = G.speed * 1.2;
               this.collide(G.pos, 0.55);
             } else {
@@ -1405,11 +1455,17 @@ export class PigeonGame {
                 const ldz = lu.z - G.pos.y;
                 const ld = Math.hypot(ldx, ldz);
                 if (ld > 1.2) {
-                  G.pos.x += (ldx / ld) * G.speed * dt;
-                  G.pos.y += (ldz / ld) * G.speed * dt;
+                  const wp = this.guardWaypoint(G, lu.x, lu.z, dt);
+                  const mdx = wp.x - G.pos.x;
+                  const mdz = wp.z - G.pos.y;
+                  const md = Math.hypot(mdx, mdz) || 1;
+                  G.pos.x += (mdx / md) * G.speed * dt;
+                  G.pos.y += (mdz / md) * G.speed * dt;
+                  G.facing = Math.atan2(mdx, mdz);
                   gSpeed = G.speed;
+                } else {
+                  G.facing = Math.atan2(ldx, ldz);
                 }
-                G.facing = Math.atan2(ldx, ldz);
                 this.collide(G.pos, 0.55);
               }
             } else {

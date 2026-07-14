@@ -48,6 +48,14 @@ export interface Guard {
   lsz: number;
   /** Seconds spent searching the last-seen spot before giving up. */
   searchT: number;
+  /** Cached A* route (world waypoints) toward the current dynamic goal. */
+  navPath: { x: number; z: number }[] | null;
+  navIdx: number;
+  /** Seconds until the route is recomputed. */
+  repathT: number;
+  /** Goal the cached route was built for (repath when it moves far). */
+  goalX: number;
+  goalZ: number;
 }
 
 /** A short-lived debris cube thrown by pickups / dashes. */

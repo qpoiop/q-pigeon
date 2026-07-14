@@ -55,6 +55,7 @@ pnpm dev           # http://localhost:5173 개발 서버
 pnpm build         # tsc -b && vite build → dist/
 pnpm preview       # 빌드 결과 로컬 서빙
 pnpm typecheck     # 타입만 검사
+pnpm test          # vitest — 경비 길찾기 단위/맵 검증 테스트
 ```
 
 `dist/`는 정적 파일이며 어떤 정적 호스팅(GitHub Pages, Netlify, S3 등)에도 그대로
@@ -97,6 +98,10 @@ pnpm typecheck     # 타입만 검사
 - **목표 방향 화살표** — 바닥에 가장 가까운 미회수 필름(전부 회수 시 탈출구) 방향을 가리킨다.
 - **경비 AI 강화** — 시야에서 놓쳐도 곧바로 포기하지 않고 마지막 목격 지점을 **수색**하며,
   발각 시 근처(16m) 경비에게 **경보가 전파**된다.
+- **경비 길찾기 (A\*)** — 추격·수색·미끼 유인 시 직선이 아니라 **벽을 돌아 경로를 찾아**
+  이동한다. 레벨 벽에서 반경 팽창 격자(`NavGrid`)를 만들고 8방향 A\* + 시야 스트링풀로
+  자연스러운 웨이포인트를 뽑으며, 개활지에선 직진(LOS)해 추격이 답답하지 않다.
+  순수 함수라 유닛 테스트로 검증한다(`pnpm test`).
 - **랭크 · 기록** — 스테이지 클리어 시 소요 시간과 발각 횟수로 **S/A/B/C 랭크**를 매기고,
   최고 기록과 스테이지 해제 상태를 브라우저(`localStorage`)에 저장한다. 타이틀에서
   **스테이지 선택**(클리어한 곳까지 해제, 최고 랭크 표시)과 요원·난이도·콜사인이 유지된다.
@@ -125,6 +130,10 @@ src/
     voice.ts                   WebRTC P2P 음성 (Voice)
     template.ts                HUD 마크업 + 컴포넌트 CSS
     types.ts                   런타임 엔티티 타입
+    ai/                        ── 경비 AI (순수·테스트 가능) ──
+      navgrid.ts               벽에서 만든 반경 팽창 격자 (NavGrid)
+      pathfind.ts              8방향 A* + 시야 스트링풀 (findPath)
+      *.test.ts                pathfinder 단위 + 실제 맵 navigability 테스트
   styles/
     modernist.css              Modernist 디자인 시스템 토큰/기본 타입
     index.css                  전역 리셋
