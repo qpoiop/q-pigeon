@@ -110,6 +110,59 @@
 
 ---
 
+## 7. 모델 규격 / 수용 기준 (필수 계약)
+
+> 이 규격을 어기면 회전·애님·배치가 코드와 어긋나 제대로 동작하지 않는다.
+> 코드 규약(`birds.ts`/`engine.ts`)에서 그대로 도출한 값이다.
+
+### 7.1 좌표·스케일·원점 (전 캐릭터/소품 공통)
+- **축**: Forward **+Z**, Up **+Y**, Right **+X**. (facing=0 → 모델이 +Z를 바라봐야 함. `group.rotation.y = facing`, `facing = atan2(x, z)`.)
+- **원점(pivot)**: 두 발 사이 **지면 (0,0,0)**. 캐릭터 발바닥이 y=0. 코드가 `group.position.set(x, 0, z)`로 지면에 놓는다.
+- **스케일**: 1 unit = 월드 미터. 요원 새 총높이 ≈ **1.4**, 바디 반경 ≈ 0.46, **충돌 반경 0.5**(부엉이 약간 큼). 이 범위를 벗어나면 픽업/충돌 반경과 어긋남.
+- **rest pose**: +Z 정면. T/A-pose 불필요(파츠는 절차 애님이 구동).
+
+### 7.2 캐릭터 통합 2경로 — **Path A 우선 권장**
+- **Path A (경량, 권장)**: 기존 절차 애님(`animBird`)을 **그대로 재사용**. 스켈레탈 클립 **불필요**. 대신 아래 7.3의 **명명 노드 계층**을 반드시 만족해야 함. 가장 빠르고, 지금의 살아있는 새 움직임(고개 글랜스·워들·날개 퍼덕임)을 유지.
+- **Path B (풀리그, 후순위)**: 스켈레탈 리그 + glTF 애님 클립 + `AnimationMixer`. 절차 레이어는 애디티브로 상단 합성. 더 부드럽지만 무겁고 작업량 큼.
+
+### 7.3 Path A 필수 노드 (animBird 계약) — 이름·피벗 정확히
+`makeBird`가 반환하는 `Bird` 인터페이스의 노드를 glTF가 그대로 노출해야 한다. `animBird`가 매 프레임 아래 변환을 건다:
+
+| 노드명 | 역할 | 피벗 위치 | animBird가 구동하는 변환 |
+|---|---|---|---|
+| `body` | 몸통 | 기하 중심 | `position.y`(bob/크라우치), `rotation.x`(lean/pitch), `rotation.z`(bank/waddle), `scale.y`·`scale.z`(대시 스트레치) |
+| `head` | 머리(자식 포함 그룹) | **목 base** | `position.y`·`position.z`(bob/thrust/peck), `rotation.x`(pitch), `rotation.y`(글랜스). **반드시 +Z 정면** |
+| `wings[0]` = **우(+X)** | 오른 날개 | 어깨(안쪽 가장자리) | `rotation.z`(퍼덕임 ±0.15±flut), `rotation.x`(대시 sweep) |
+| `wings[1]` = **좌(−X)** | 왼 날개 | 어깨(안쪽 가장자리) | 위 대칭 |
+| `feet[0]` = **우**, `feet[1]` = **좌** | 다리+발 | 고관절 | `position.z`(보폭 ±0.22), `position.y`(리프트) |
+| `tail` | 꼬리 | 몸통 후미 base | `rotation.x`(steer), `rotation.z`(bank) |
+
+- **좌/우 인덱스**: `[0]=우(+X쪽)`, `[1]=좌(−X쪽)`. 뒤집히면 날개/발이 어긋나 접힘.
+- **피벗 로컬축**이 위 변환과 일치해야 함(예: 날개 `rotation.z`가 위아래 퍼덕임이 되도록 어깨 원점 정렬).
+- 초기 `body.scale`(종별 실루엣)은 코드가 `baseScaleY/Z`로 캡처해 대시 스트레치를 **곱셈**한다 → 리깅 시 바디 기본 스케일을 파괴하지 말 것.
+
+### 7.4 애니메이션 클립 (Path B 선택 시에만)
+- 클립: `idle`, `walk`, `run`, `crouch_idle`, `crouch_move`, `dash`, `alert`.
+- **in-place(루트 모션 없음)** — 이동은 코드가 `group.position`을 구동한다. 클립에 XZ 이동 넣지 말 것.
+- 루프 플래그 명시(idle/walk/run/crouch=loop, dash/alert=one-shot). 30fps 베이크.
+
+### 7.5 소품 회전 규격
+- **회전 소품**(필름 C1, 미끼 C2): 피벗 = 기하 중심, **Y축 스핀**(코드가 `rotation.y = t*k` 구동). 부유 bob는 `position.y`. 정지 시 지면 위 살짝 뜬 높이(≈0.8) 가정.
+- **캐니스터**(연막 C3): 피벗 바닥 중심, 정적.
+
+### 7.6 환경 킷 규격
+- 원점: **바닥 중심**, 그리드 스냅(정수 단위 권장). 벽 조각은 `levels.ts`의 `walls`(Bounds: minX..maxZ)에 타일링되도록 축 정렬.
+- **충돌은 코드의 Bounds가 담당** → 모델은 시각만. 벽 두께/높이는 현 `BoxGeometry` 파라미터를 근사.
+- InstancedMesh 대상 조각: **단일 머티리얼 · 공유 지오메트리**.
+
+### 7.7 공통 파일 규격
+- **.glb + Draco**. Path A = 명명 노드 계층, Path B = 단일 스킨메시 + 클립.
+- 머티리얼: `MeshToonMaterial`/`MeshLambertMaterial` 호환, 소형 팔레트(7.1 색).
+- 텍스처(있으면) KTX2/WebP, ≤512px.
+- **네이밍**: 노드/본 이름을 7.3 표와 **대소문자까지 정확히** 일치.
+
+---
+
 ## 부록 — 현재 절차 소스 위치 (구현 참조)
 
 | 요소 | 파일:심볼 |
