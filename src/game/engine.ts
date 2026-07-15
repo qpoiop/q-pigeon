@@ -386,21 +386,21 @@ export class PigeonGame {
 
     this.covers = [];
     for (const cv of L.covers) {
+      // teal-tinted zone so it clearly reads as a functional hiding spot
       const cm = new THREE.Mesh(
         new THREE.PlaneGeometry(cv.w, cv.d),
-        new THREE.MeshBasicMaterial({ color: 0xc9c6c3, transparent: true, opacity: 0.75 }),
+        new THREE.MeshBasicMaterial({ color: 0x18a6c4, transparent: true, opacity: 0.3 }),
       );
       cm.rotation.x = -Math.PI / 2;
       cm.position.set(cv.x, 0.02, cv.z);
       this.levelGroup.add(cm);
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(new THREE.PlaneGeometry(cv.w, cv.d)),
-        new THREE.LineBasicMaterial({ color: MID }),
+        new THREE.LineBasicMaterial({ color: 0x18a6c4 }),
       );
       edges.rotation.x = -Math.PI / 2;
       edges.position.set(cv.x, 0.03, cv.z);
       this.levelGroup.add(edges);
-      bar(cv.x - cv.w / 4, cv.z - cv.d / 4, cv.w / 3, cv.d / 3, 0.55, mat(0xc2bfbc));
       this.covers.push({
         minX: cv.x - cv.w / 2,
         maxX: cv.x + cv.w / 2,
@@ -1605,7 +1605,7 @@ export class PigeonGame {
         '<ul class="pg-rules">' +
         '<li><b>이동</b><span>WASD / 방향키 · 모바일: 화면 아무 곳이나 눌러 드래그</span></li>' +
         '<li><b>일시정지 (Esc)</b><span>카메라 거리·사운드 조절 / 재시도</span></li>' +
-        '<li><b>숨기 (C)</b><span>느리지만 덜 띈다. 회색 은폐 구역에선 완전 은신</span></li>' +
+        '<li><b>숨기 (C)</b><span>느리지만 덜 띈다. 청록색 은폐 구역에선 완전 은신</span></li>' +
         '<li><b>공격 (F)</b><span>요원 성향에 따라 근접 타격 또는 원거리 사격. 경비 제압</span></li>' +
         '<li><b>스킬 (E)</b><span>' +
         CHARS[this.charId].skill.name +

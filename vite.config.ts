@@ -11,8 +11,10 @@ export default defineConfig({
     VitePWA({
       // Auto-inject the registration script and swap in a new service worker as
       // soon as one is built — players always get the latest version on reload.
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // prompt: surface a visible "update available" banner instead of silently
+      // updating, so players know a new deploy landed and can apply it in a tap.
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'favicon-64.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'pigeonoid',
