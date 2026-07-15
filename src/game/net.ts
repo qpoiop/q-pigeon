@@ -34,6 +34,12 @@ export class Net implements Signaler {
   name = 'AGENT';
   peers: Record<string, Peer> = {};
   lastSend = 0;
+  // last-broadcast state, to skip redundant presence updates (cost control)
+  private lastX = 1e9;
+  private lastZ = 1e9;
+  private lastRy = 0;
+  private lastHp = -1;
+  private lastC = 0;
   voice: Voice;
   /** Latest host-authoritative snapshot (guest side); null until one arrives. */
   world: World | null = null;
@@ -53,6 +59,8 @@ export class Net implements Signaler {
       this.status = 'off';
       return;
     }
+    this.lastSend = 0;
+    this.lastX = 1e9; // force the first presence to send on connect
     try {
       this.status = 'connecting';
       this.onStatus();
@@ -144,11 +152,34 @@ export class Net implements Signaler {
     }
   }
 
+  /** Any teammate seen within the last few seconds. */
+  private hasLivePeer(): boolean {
+    const now = performance.now();
+    for (const id in this.peers) if (now - this.peers[id].seen < 5000) return true;
+    return false;
+  }
+
   send(player: Player, stage: number, charId: CharId): void {
     if (!this.ws || this.ws.readyState !== 1) return;
     const now = performance.now();
-    if (now - this.lastSend < 140) return;
+    // cost control: full rate only when a teammate is present AND state changed;
+    // otherwise a slow heartbeat (enough for discovery + keepalive).
+    const hasPeer = this.hasLivePeer();
+    const changed =
+      Math.abs(player.pos.x - this.lastX) > 0.04 ||
+      Math.abs(player.pos.y - this.lastZ) > 0.04 ||
+      Math.abs(player.facing - this.lastRy) > 0.05 ||
+      player.hp !== this.lastHp ||
+      (player.crouch ? 1 : 0) !== this.lastC;
+    const minGap = hasPeer ? 120 : 1000;
+    if (now - this.lastSend < minGap) return;
+    if (!changed && now - this.lastSend < 1500) return; // heartbeat when idle
     this.lastSend = now;
+    this.lastX = player.pos.x;
+    this.lastZ = player.pos.y;
+    this.lastRy = player.facing;
+    this.lastHp = player.hp;
+    this.lastC = player.crouch ? 1 : 0;
     try {
       this.ws.send(
         JSON.stringify({
@@ -197,7 +228,7 @@ export class Net implements Signaler {
   sendWorld(w: World): void {
     if (!this.ws || this.ws.readyState !== 1) return;
     const now = performance.now();
-    if (now - this.lastWorld < 66) return;
+    if (now - this.lastWorld < 100) return; // 10Hz — cost control
     this.lastWorld = now;
     try {
       this.ws.send(JSON.stringify({ g: PROTOCOL_TAG, room: this.room, id: this.id, t: 'world', w }));
