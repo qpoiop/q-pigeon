@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/client" />
 
 interface ImportMetaEnv {
   /** WebSocket relay base URL (e.g. wss://pigeonoid-worker.<sub>.workers.dev/ws). */

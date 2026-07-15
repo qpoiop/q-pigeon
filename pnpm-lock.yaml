@@ -42,6 +42,9 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(terser@5.49.0)
+      workbox-window:
+        specifier: ^7.4.1
+        version: 7.4.1
 
 packages:
 
