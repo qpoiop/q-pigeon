@@ -134,6 +134,8 @@ export class PigeonGame {
   private lastGhost = 0;
   private lastBump = 0;
   private paused = false;
+  private installEvt: { prompt: () => void; userChoice: Promise<unknown> } | null = null;
+  private canInstall = false;
   private rosterT = 0;
   private mapT = 0;
   private lax = 0;
@@ -806,6 +808,35 @@ export class PigeonGame {
     });
     this.$('.pg-dr-x').addEventListener('click', () => this.toggleDrawer(false));
     this.$('.pg-pausebtn').addEventListener('click', () => this.pause());
+    // custom install (add-to-home-screen) flow
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this.installEvt = e as unknown as { prompt: () => void; userChoice: Promise<unknown> };
+      this.canInstall = true;
+      if (this.mode === 'menu') this.$('.pg-install').classList.add('show');
+    });
+    window.addEventListener('appinstalled', () => {
+      this.canInstall = false;
+      this.$('.pg-install').classList.remove('show');
+    });
+    this.$('.pg-install').addEventListener('click', () => {
+      if (this.installEvt) {
+        this.installEvt.prompt();
+        void this.installEvt.userChoice.finally(() => {
+          this.installEvt = null;
+          this.canInstall = false;
+          this.$('.pg-install').classList.remove('show');
+        });
+      } else {
+        this.toast('브라우저 공유/메뉴 → "홈 화면에 추가"');
+      }
+    });
+    // iOS Safari never fires beforeinstallprompt — offer manual instructions
+    const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as unknown as { standalone?: boolean }).standalone === true;
+    if (iOS && !standalone) this.canInstall = true;
     (this.$('.pg-drawer') as HTMLElement).style.pointerEvents = 'auto';
     this.$('.pg-mic').addEventListener('click', async () => {
       this.sfx.ensure();
@@ -1348,9 +1379,9 @@ export class PigeonGame {
     b.hurtFlash = Math.max(0, b.hurtFlash - dt * 3);
     if (b.phase === 0) {
       face();
-      if (pdist > 9) {
-        b.pos.x += Math.sin(b.facing) * 3 * dt;
-        b.pos.y += Math.cos(b.facing) * 3 * dt;
+      if (pdist > 8) {
+        b.pos.x += Math.sin(b.facing) * 4.6 * dt;
+        b.pos.y += Math.cos(b.facing) * 4.6 * dt;
         this.collide(b.pos, 1.3);
       }
       if (b.timer <= 0) {
@@ -1364,7 +1395,7 @@ export class PigeonGame {
       if (b.pattern === 2) {
         b.ring.visible = true;
         b.ring.position.set(b.pos.x, 0.06, b.pos.y);
-        b.ring.scale.setScalar(7);
+        b.ring.scale.setScalar(10);
         (b.ring.material as THREE.MeshBasicMaterial).opacity = fl;
       } else {
         const len = b.pattern === 0 ? 16 : 14;
@@ -1382,22 +1413,22 @@ export class PigeonGame {
         b.tele.visible = false;
         b.ring.visible = false;
         if (b.pattern === 0) {
-          for (const off of [-0.32, 0, 0.32])
-            this.spawnProjectile(b.pos.x, b.pos.y, b.facing + off, 1, 15, true);
+          for (const off of [-0.6, -0.3, 0, 0.3, 0.6])
+            this.spawnProjectile(b.pos.x, b.pos.y, b.facing + off, 1, 17, true);
           this.sfx.alert();
           b.phase = 0;
-          b.timer = enrage ? 0.9 : 1.5;
+          b.timer = enrage ? 0.8 : 1.2;
         } else if (b.pattern === 1) {
-          b.lvx = Math.sin(b.facing) * 18;
-          b.lvz = Math.cos(b.facing) * 18;
+          b.lvx = Math.sin(b.facing) * 23;
+          b.lvz = Math.cos(b.facing) * 23;
           b.phase = 2;
           b.timer = 0.55;
         } else {
-          this.hurtAt(b.pos.x, b.pos.y, 7, 2);
+          this.hurtAt(b.pos.x, b.pos.y, 10, 2);
           this.burst(b.pos.x, b.pos.y, 0xec3013, 16);
           this.addShake(0.4);
           b.phase = 0;
-          b.timer = enrage ? 0.9 : 1.5;
+          b.timer = enrage ? 0.8 : 1.2;
         }
       }
     } else {
@@ -1407,7 +1438,7 @@ export class PigeonGame {
       this.hurtAt(b.pos.x, b.pos.y, 1.8, 2);
       if (b.timer <= 0) {
         b.phase = 0;
-        b.timer = enrage ? 0.9 : 1.5;
+        b.timer = enrage ? 0.8 : 1.2;
       }
     }
     b.model.group.position.set(b.pos.x, 0, b.pos.y);
@@ -1481,6 +1512,7 @@ export class PigeonGame {
   private showTitle(): void {
     this.mode = 'menu';
     this.paused = false;
+    if (this.canInstall) this.$('.pg-install').classList.add('show');
     this.net.disconnect(); // returning to title = leave the room (frees the DO slot)
     this.sfx.stopAmb();
     this.buildLevel(0);
@@ -1654,6 +1686,7 @@ export class PigeonGame {
   }
 
   private startStage(idx: number): void {
+    this.$('.pg-install').classList.remove('show');
     this.buildLevel(idx);
     this.mode = 'brief';
     const L = LEVELS[idx];
@@ -2581,10 +2614,10 @@ export class PigeonGame {
         const mx = wp.x - G.pos.x;
         const mz = wp.z - G.pos.y;
         const m = Math.hypot(mx, mz) || 1;
-        G.pos.x += (mx / m) * G.speed * 1.35 * dt;
-        G.pos.y += (mz / m) * G.speed * 1.35 * dt;
+        G.pos.x += (mx / m) * G.speed * 1.12 * dt;
+        G.pos.y += (mz / m) * G.speed * 1.12 * dt;
         this.collide(G.pos, 0.55);
-        gSpeed = G.speed * 1.35;
+        gSpeed = G.speed * 1.12;
         this.hideZone(G);
         alert = Math.max(alert, 0.5);
         if (tw < 1) {
