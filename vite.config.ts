@@ -24,8 +24,8 @@ export default defineConfig({
         theme_color: '#f3f2f2',
         background_color: '#14110f',
         display: 'standalone',
-        // free rotation — don't lock the installed app to one orientation
-        orientation: 'any',
+        // open in landscape by default (the game is built for a wide view)
+        orientation: 'landscape',
         start_url: './',
         scope: './',
         icons: [

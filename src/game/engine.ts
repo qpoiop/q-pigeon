@@ -2953,7 +2953,8 @@ export class PigeonGame {
     const sz = H / L.d;
     const X = (x: number) => (x + L.w / 2) * sx;
     const Z = (z: number) => (z + L.d / 2) * sz;
-    c.fillStyle = '#eceae8';
+    c.clearRect(0, 0, W, H);
+    c.fillStyle = 'rgba(236,234,232,0.5)'; // translucent backdrop — see the map through it
     c.fillRect(0, 0, W, H);
     c.fillStyle = '#9a8f82';
     for (const cv of this.crates) {
