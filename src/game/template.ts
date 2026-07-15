@@ -102,7 +102,7 @@ export const CSS =
   '.pg-peerhp i{width:11px;height:6px;background:#18a6c4;border:1px solid #201e1d;display:block}' +
   '.pg-peerhp i.e{background:rgba(32,30,29,.12)}' +
   '.pg-peerhp.down{opacity:.65}' +
-  '.pg-map{position:absolute;top:40px;left:10px;border:2px solid #201e1d;background:#f3f2f2;box-shadow:0 2px 8px rgba(0,0,0,.25)}' +
+  '.pg-map{position:absolute;top:40px;left:10px;border:2px solid rgba(32,30,29,.6);background:transparent;box-shadow:0 2px 8px rgba(0,0,0,.18)}' +
   '.pg-roster{position:absolute;top:38px;right:10px;display:flex;flex-direction:column;gap:4px;align-items:flex-end}' +
   '.pg-roster .pr{display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;background:rgba(243,242,242,.88);border:1px solid #d8d5d3;padding:4px 8px;color:#3c3937}' +
   '.pg-roster .pr .sq{width:7px;height:7px;background:#8a8683}' +
