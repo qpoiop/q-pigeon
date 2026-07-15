@@ -27,7 +27,7 @@ export const TPL =
   ' <div class="pg-touch">' +
   '  <div class="pg-stick"><div class="pg-knob"></div></div>' +
   '  <div class="pg-btns">' +
-  '   <button class="pg-b pg-b-attack">공격</button><button class="pg-b pg-b-dash">대시</button><button class="pg-b pg-b-crouch">숨기</button>' +
+  '   <button class="pg-b pg-b-attack">공격</button><button class="pg-b pg-b-skill">스킬</button><button class="pg-b pg-b-dash">대시</button><button class="pg-b pg-b-crouch">숨기</button>' +
   '   <button class="pg-b pg-b-decoy">미끼</button><button class="pg-b pg-b-smoke">연막</button>' +
   '  </div>' +
   ' </div>' +

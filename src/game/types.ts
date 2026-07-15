@@ -47,12 +47,16 @@ export interface Player extends Bird {
   crouch: boolean;
   smokeUntil: number;
   smokeShell?: THREE.Mesh;
+  braceShell?: THREE.Mesh;
   /** Combat: current / max hit points, and invulnerability window end (perf ms). */
   hp: number;
   maxHp: number;
   hurtUntil: number;
   /** Last time an attack was fired (s), for cooldown. */
   atkT: number;
+  /** Last time the active skill fired (s), and the brace-immunity end (perf ms). */
+  skillT: number;
+  braceUntil: number;
 }
 
 /** A player or enemy projectile travelling across the field. */
@@ -66,6 +70,8 @@ export interface Projectile {
   dmg: number;
   /** True = fired by an enemy (hits player); false = player shot (hits guards). */
   enemy: boolean;
+  /** Pierces through guards instead of stopping on the first hit. */
+  pierce?: boolean;
 }
 
 export type GuardState = 'patrol' | 'chase' | 'lured' | 'search';

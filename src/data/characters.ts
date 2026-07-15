@@ -30,6 +30,16 @@ export interface CombatDef {
   projSpeed?: number;
 }
 
+/** Per-character active skill (E / touch). Dash & crouch stay common to all. */
+export interface SkillDef {
+  /** Skill id the engine branches on. */
+  id: 'brace' | 'blink' | 'pierce';
+  name: string;
+  desc: string;
+  /** Cooldown (s). */
+  cd: number;
+}
+
 export interface CharDef {
   /** Display name (Korean). */
   name: string;
@@ -49,6 +59,8 @@ export interface CharDef {
   pal: BirdPalette;
   /** Combat archetype stats. */
   combat: CombatDef;
+  /** Unique active skill. */
+  skill: SkillDef;
 }
 
 export const CHARS: Record<CharId, CharDef> = {
@@ -63,6 +75,7 @@ export const CHARS: Record<CharId, CharDef> = {
     // cool slate-grey with the signature red beak/beret
     pal: { body: 0xdfe4ea, head: 0x2f3540, wing: 0x232830, accent: ACCENT },
     combat: { hp: 6, atk: 'melee', dmg: 1, range: 2.4, atkCd: 0.55 },
+    skill: { id: 'brace', name: '방패 태세', desc: '2.5초간 모든 피해 무효', cd: 9 },
   },
   magpie: {
     name: '까치',
@@ -75,6 +88,7 @@ export const CHARS: Record<CharId, CharDef> = {
     // bold black-and-white with an iridescent cyan accent
     pal: { body: 0x17171a, head: 0x17171a, wing: 0xf3f2f2, accent: 0x18a6c4 },
     combat: { hp: 3, atk: 'melee', dmg: 2, range: 1.9, atkCd: 0.32 },
+    skill: { id: 'blink', name: '섬광 대시', desc: '전방 순간이동, 지나친 경비 제압', cd: 6 },
   },
   owl: {
     name: '부엉이',
@@ -87,6 +101,7 @@ export const CHARS: Record<CharId, CharDef> = {
     // warm tan/brown with an amber accent
     pal: { body: 0xcbb79a, head: 0xa2886a, wing: 0x6a5540, accent: 0xe0a021 },
     combat: { hp: 4, atk: 'ranged', dmg: 2, range: 16, atkCd: 1.0, projSpeed: 26 },
+    skill: { id: 'pierce', name: '관통 사격', desc: '일렬의 경비를 관통 제압', cd: 7 },
   },
 };
 
