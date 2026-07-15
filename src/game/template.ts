@@ -6,7 +6,7 @@ export const TPL =
   '  <div class="pg-topbar">' +
   '   <div class="pg-stage"></div>' +
   '   <div class="pg-films"></div>' +
-  '   <div class="pg-tbsp"></div>' +
+  '   <div class="pg-tbsp"><span class="pg-brand">pigeonoid</span></div>' +
   '   <button class="pg-tbtn pg-mic">MIC 꺼짐</button>' +
   '   <button class="pg-tbtn pg-missionbtn">임무 (Tab)</button>' +
   '   <button class="pg-tbtn pg-pausebtn">정지</button>' +
@@ -26,13 +26,14 @@ export const TPL =
   '  <div class="pg-dr-bd"></div>' +
   ' </div>' +
   ' <div class="pg-abilities">' +
-  '  <button class="pg-slot pg-b-attack"><i class="k">F</i><i class="n">공격</i><i class="cd"></i></button>' +
-  '  <button class="pg-slot pg-b-skill"><i class="k">E</i><i class="n sk">스킬</i><i class="cd"></i></button>' +
-  '  <button class="pg-slot pg-b-dash"><i class="k">⇧</i><i class="n">대시</i><i class="cd"></i></button>' +
-  '  <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="n">숨기</i></button>' +
-  '  <button class="pg-slot pg-b-decoy"><i class="k">1</i><i class="n">미끼</i><i class="ct"></i></button>' +
-  '  <button class="pg-slot pg-b-smoke"><i class="k">2</i><i class="n">연막</i><i class="ct"></i></button>' +
+  '  <button class="pg-slot pg-b-attack"><i class="k">F</i><i class="ic">⚔</i><i class="n">공격</i><i class="cd"></i></button>' +
+  '  <button class="pg-slot pg-b-skill"><i class="k">E</i><i class="ic">✦</i><i class="n sk">스킬</i><i class="cd"></i></button>' +
+  '  <button class="pg-slot pg-b-dash"><i class="k">⇧</i><i class="ic">»</i><i class="n">대시</i><i class="cd"></i></button>' +
+  '  <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="ic">◐</i><i class="n">숨기</i></button>' +
+  '  <button class="pg-slot pg-b-decoy"><i class="k">1</i><i class="ic">◆</i><i class="n">미끼</i><i class="ct"></i></button>' +
+  '  <button class="pg-slot pg-b-smoke"><i class="k">2</i><i class="ic">☁</i><i class="n">연막</i><i class="ct"></i></button>' +
   ' </div>' +
+  ' <button class="pg-install">앱 설치 ↓</button>' +
   ' <div class="pg-overlay"></div>' +
   '</div>';
 
@@ -47,7 +48,9 @@ export const CSS =
   '.pg-films b{color:#ec3013}' +
   '.pg-inv{border-right:2px solid #201e1d;color:#3c3937}' +
   '.pg-inv b{color:#201e1d}' +
-  '.pg-tbsp{flex:1}' +
+  '.pg-tbsp{flex:1;justify-content:center}' +
+  '.pg-brand{font:800 13px/1 inherit;letter-spacing:.18em;color:#201e1d}' +
+  '.pg-dot{width:8px;height:8px;background:#ec3013;display:inline-block;margin-left:5px}' +
   '.pg-tbtn{pointer-events:auto;border:0;border-left:2px solid #201e1d;background:transparent;font:700 11px/1 inherit;letter-spacing:.07em;text-transform:uppercase;padding:0 9px;color:#201e1d;cursor:pointer;text-align:left}' +
   '.pg-tbtn:hover{background:rgba(236,48,19,.08)}' +
   '.pg-tbtn.onn{background:#ec3013;color:#f3f2f2}' +
@@ -55,15 +58,15 @@ export const CSS =
   '.pg-net.on{color:#ec3013;font-weight:700}' +
   '.pg-alertbar{position:absolute;top:28px;left:0;right:0;height:3px}' +
   '.pg-alertfill{height:100%;width:0%;background:#ec3013;transition:width .1s linear}' +
-  '.pg-hp{position:absolute;top:36px;left:50%;transform:translateX(-50%);display:flex;gap:3px;pointer-events:none}' +
-  '.pg-hp i{width:15px;height:7px;background:#ec3013;border:1px solid #201e1d;display:block}' +
-  '.pg-hp i.e{background:rgba(32,30,29,.12)}' +
+  '.pg-hp{position:absolute;top:150px;left:12px;display:flex;gap:3px;pointer-events:none}' +
+  '.pg-hp i{width:19px;height:10px;background:#ec3013;border:1px solid #201e1d;display:block;box-shadow:0 1px 3px rgba(0,0,0,.2)}' +
+  '.pg-hp i.e{background:rgba(32,30,29,.14)}' +
   '.pg-bosshp{position:absolute;top:48px;left:50%;transform:translateX(-50%);width:min(440px,74%);display:none;text-align:center;pointer-events:none}' +
   '.pg-bosshp.show{display:block}' +
   '.pg-bosshp .l{font:800 10px/1 inherit;letter-spacing:.2em;color:#ec3013;text-transform:uppercase}' +
   '.pg-bosshptrack{margin-top:3px;height:9px;border:2px solid #201e1d;background:rgba(32,30,29,.15)}' +
   '.pg-bosshpfill{height:100%;width:100%;background:#ec3013;transition:width .12s linear}' +
-  '.pg-peerhp{position:absolute;top:60px;left:50%;transform:translateX(-50%);display:none;gap:2px;align-items:center;pointer-events:none}' +
+  '.pg-peerhp{position:absolute;top:174px;left:12px;display:none;gap:2px;align-items:center;pointer-events:none}' +
   '.pg-peerhp.show{display:flex}' +
   '.pg-peerhp .l{font:700 8px/1 inherit;letter-spacing:.1em;color:#18a6c4}' +
   '.pg-peerhp i{width:11px;height:6px;background:#18a6c4;border:1px solid #201e1d;display:block}' +
@@ -95,17 +98,20 @@ export const CSS =
   '.pg-dr-bd .brief{color:#3c3937;margin:0}' +
   /* touch */
   /* ability bar (Duckov-style slots with cooldown sweeps) */
-  '.pg-abilities{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:10;pointer-events:auto}' +
-  '.pg-slot{position:relative;overflow:hidden;width:54px;height:54px;border:2px solid #201e1d;background:rgba(243,242,242,.82);color:#201e1d;padding:0;cursor:pointer}' +
+  '.pg-abilities{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:5px;z-index:10;pointer-events:auto}' +
+  '.pg-slot{position:relative;overflow:hidden;width:48px;height:48px;border:2px solid #201e1d;background:rgba(243,242,242,.82);color:#201e1d;padding:0;cursor:pointer}' +
   '.pg-slot:active{background:#ec3013;color:#f3f2f2;border-color:#ec3013}' +
   '.pg-slot.onn{background:#201e1d;color:#f3f2f2}' +
   '.pg-slot.dim{opacity:.4}' +
-  '.pg-slot .k{position:absolute;top:3px;left:5px;font:700 9px/1 inherit;letter-spacing:.05em;color:#8a8683;font-style:normal}' +
+  '.pg-slot .k{position:absolute;top:2px;left:4px;font:700 8px/1 inherit;letter-spacing:.04em;color:#8a8683;font-style:normal}' +
   '.pg-slot.onn .k{color:#c9c6c3}' +
-  '.pg-slot .n{position:absolute;left:0;right:0;bottom:6px;text-align:center;font:700 11px/1 inherit;letter-spacing:.03em;font-style:normal;white-space:nowrap}' +
-  '.pg-slot .cd{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;font:800 17px/1 inherit;color:#201e1d}' +
-  '.pg-slot .ct{position:absolute;top:3px;right:5px;font:800 12px/1 inherit;font-style:normal;color:#ec3013}' +
+  '.pg-slot .ic{position:absolute;left:0;right:0;top:10px;text-align:center;font:400 18px/1 inherit;font-style:normal}' +
+  '.pg-slot .n{position:absolute;left:0;right:0;bottom:3px;text-align:center;font:700 8px/1 inherit;letter-spacing:.02em;font-style:normal;white-space:nowrap}' +
+  '.pg-slot .cd{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;font:800 16px/1 inherit;color:#201e1d}' +
+  '.pg-slot .ct{position:absolute;top:2px;right:4px;font:800 11px/1 inherit;font-style:normal;color:#ec3013}' +
   /* overlay */
+  '.pg-install{position:absolute;top:10px;right:12px;z-index:50;display:none;border:2px solid #ec3013;background:#ec3013;color:#f3f2f2;font:800 12px/1 inherit;letter-spacing:.08em;padding:9px 13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}' +
+  '.pg-install.show{display:block}' +
   '.pg-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(243,242,242,.94);overflow:auto;z-index:40}' +
   '.pg-overlay.show{display:flex}' +
   '.pg-panel{width:min(620px,92%);max-height:92%;overflow-y:auto;border:2px solid #201e1d;background:#f3f2f2;margin:16px 0}' +
@@ -163,4 +169,4 @@ export const CSS =
   '@media(max-width:760px),(max-height:520px){.pg-topbar{overflow:hidden}.pg-topbar>div,.pg-tbtn{padding:8px 8px;font-size:10px;letter-spacing:.05em;gap:5px;white-space:nowrap}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}.pg-map{transform:scale(.85);transform-origin:top left}}' +
   // very narrow / very short: drop non-essential topbar items and keep each on one
   // line so it never overflows. (>.pg-* prefixes outrank the base `.pg-topbar>div`.)
-  '@media(max-width:520px),(max-height:430px){.pg-topbar>div,.pg-tbtn{padding:7px 7px;font-size:9px;letter-spacing:.02em;gap:4px;white-space:nowrap}.pg-topbar>.pg-brand{font-size:0;padding:7px 9px}.pg-topbar>.pg-stage,.pg-topbar>.pg-inv{display:none}.pg-topbar>.pg-net{max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}';
+  '@media(max-width:520px),(max-height:430px){.pg-topbar>div,.pg-tbtn{padding:7px 7px;font-size:9px;letter-spacing:.02em;gap:4px;white-space:nowrap}.pg-brand{display:none}.pg-topbar>.pg-stage,.pg-topbar>.pg-inv{display:none}.pg-topbar>.pg-net{max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}';
