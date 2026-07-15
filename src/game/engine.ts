@@ -257,6 +257,8 @@ export class PigeonGame {
     p.hp = C.combat.hp;
     p.hurtUntil = 0;
     p.atkT = -10;
+    p.skillT = -100;
+    p.braceUntil = 0;
     if (old) {
       this.actorGroup.remove(old.group);
       disposeObject(old.group);
@@ -270,7 +272,16 @@ export class PigeonGame {
     sm.visible = false;
     p.group.add(sm);
     p.smokeShell = sm;
+    const br = new THREE.Mesh(
+      new THREE.SphereGeometry(0.95, 14, 10),
+      new THREE.MeshBasicMaterial({ color: 0x8ad0ff, transparent: true, opacity: 0.3, depthWrite: false }),
+    );
+    br.position.y = 0.7;
+    br.visible = false;
+    p.group.add(br);
+    p.braceShell = br;
     this.player = p;
+    this.$('.pg-b-skill').textContent = C.skill.name;
   }
 
   private resize(): void {
@@ -506,6 +517,8 @@ export class PigeonGame {
     this.player.pos.set(L.spawn[0], L.spawn[1]);
     this.player.hp = this.player.maxHp;
     this.player.hurtUntil = 0;
+    this.player.skillT = -100;
+    this.player.braceUntil = 0;
     this.projectiles = [];
     this.player.facing = Math.PI;
     this.player.crouch = false;
@@ -709,6 +722,7 @@ export class PigeonGame {
       if (e.code === 'Digit1') this.useDecoy();
       if (e.code === 'Digit2') this.useSmoke();
       if (e.code === 'KeyF' || e.code === 'KeyJ') this.attack();
+      if (e.code === 'KeyE' || e.code === 'KeyK') this.skill();
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
       this.moveTarget = null;
     };
@@ -775,6 +789,10 @@ export class PigeonGame {
     this.$('.pg-b-attack').addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.attack();
+    });
+    this.$('.pg-b-skill').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.skill();
     });
     this.$('.pg-b-dash').addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -910,10 +928,18 @@ export class PigeonGame {
   }
 
   /** Spawn a travelling projectile. `enemy` shots hit the player; player shots hit guards. */
-  private spawnProjectile(x: number, z: number, facing: number, dmg: number, speed: number, enemy: boolean): void {
+  private spawnProjectile(
+    x: number,
+    z: number,
+    facing: number,
+    dmg: number,
+    speed: number,
+    enemy: boolean,
+    pierce = false,
+  ): void {
     const m = new THREE.Mesh(
-      new THREE.SphereGeometry(0.16, 8, 6),
-      new THREE.MeshBasicMaterial({ color: enemy ? ACCENT : 0x18a6c4 }),
+      new THREE.SphereGeometry(pierce ? 0.24 : 0.16, 8, 6),
+      new THREE.MeshBasicMaterial({ color: enemy ? ACCENT : pierce ? 0xe0a021 : 0x18a6c4 }),
     );
     m.position.set(x, 0.7, z);
     this.fxGroup.add(m);
@@ -926,7 +952,50 @@ export class PigeonGame {
       life: 2.4,
       dmg,
       enemy,
+      pierce,
     });
+  }
+
+  /** Per-character active skill: brace (immunity) / blink (teleport-strike) / pierce shot. */
+  private skill(): void {
+    if (this.mode !== 'play') return;
+    const P = this.player;
+    const C = CHARS[this.charId];
+    const now = performance.now() / 1000;
+    if (now - P.skillT < C.skill.cd) return;
+    P.skillT = now;
+    this.sfx.ensure();
+    if (C.skill.id === 'brace') {
+      P.braceUntil = performance.now() + 2500;
+      this.addShake(0.12);
+      this.toast('방패 태세 — 피해 무효');
+      this.sfx.item();
+    } else if (C.skill.id === 'blink') {
+      const sx = P.pos.x;
+      const sz = P.pos.y;
+      const tx = sx + Math.sin(P.facing) * 8;
+      const tz = sz + Math.cos(P.facing) * 8;
+      for (let i = 1; i <= 12; i++) {
+        const px = sx + (tx - sx) * (i / 12);
+        const pz = sz + (tz - sz) * (i / 12);
+        for (const G of this.guards)
+          if (!G.down && Math.hypot(G.pos.x - px, G.pos.y - pz) < 1.6) this.downGuard(G);
+      }
+      this.burst(sx, sz, ACCENT, 6);
+      P.pos.set(tx, tz);
+      this.collide(P.pos, 0.5);
+      this.burst(P.pos.x, P.pos.y, ACCENT, 8);
+      this.dashT = now; // reuse dash stretch + afterimage trail
+      this.addShake(0.22);
+      this.kickZoom(1.1);
+      this.sfx.dash();
+    } else {
+      // pierce: a fast, fat projectile that downs every guard in its line
+      this.spawnProjectile(P.pos.x, P.pos.y, P.facing, C.combat.dmg + 1, 34, false, true);
+      this.addShake(0.14);
+      this.kickZoom(0.8);
+      this.sfx.dash();
+    }
   }
 
   /** Take a guard down: incapacitated, laid flat, no longer a threat. */
@@ -947,7 +1016,7 @@ export class PigeonGame {
   private hurtPlayer(dmg: number): void {
     const P = this.player;
     const now = performance.now();
-    if (now < P.hurtUntil) return;
+    if (now < P.hurtUntil || now < P.braceUntil) return; // i-frames or brace immunity
     P.hurtUntil = now + 700;
     P.hp -= dmg;
     this.addShake(0.32);
@@ -1123,6 +1192,11 @@ export class PigeonGame {
         '<li><b>이동</b><span>WASD / 화살표 · 바닥 클릭 · 모바일 조이스틱</span></li>' +
         '<li><b>숨기 (C)</b><span>느리지만 덜 띈다. 회색 은폐 구역에선 완전 은신</span></li>' +
         '<li><b>공격 (F)</b><span>요원 성향에 따라 근접 타격 또는 원거리 사격. 경비 제압</span></li>' +
+        '<li><b>스킬 (E)</b><span>' +
+        CHARS[this.charId].skill.name +
+        ' — ' +
+        CHARS[this.charId].skill.desc +
+        '</span></li>' +
         '<li><b>대시 (Shift)</b><span>짧은 돌진</span></li>' +
         '<li><b>미끼 (1)</b><span>경비를 그 자리로 유인</span></li>' +
         '<li><b>연막 (2)</b><span>5초간 완전 은신</span></li>' +
@@ -1445,6 +1519,16 @@ export class PigeonGame {
           (P.smokeShell.material as THREE.MeshBasicMaterial).opacity = 0.25 + Math.sin(t * 6) * 0.1;
           P.smokeShell.rotation.y = t;
         }
+      }
+      // brace-immunity shell + skill cooldown dim on the button
+      const braceOn = performance.now() < P.braceUntil;
+      if (P.braceShell) {
+        P.braceShell.visible = braceOn;
+        if (braceOn) (P.braceShell.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.sin(t * 10) * 0.1;
+      }
+      if (this.mode === 'play') {
+        const skReady = t - P.skillT >= CHARS[this.charId].skill.cd;
+        this.$<HTMLElement>('.pg-b-skill').style.opacity = skReady ? '1' : '0.4';
       }
       for (let pI = this.parts.length - 1; pI >= 0; pI--) {
         const pp = this.parts[pI];
@@ -1913,8 +1997,10 @@ export class PigeonGame {
               if (G.down) continue;
               if (Math.hypot(pr.x - G.pos.x, pr.z - G.pos.y) < 0.7) {
                 this.downGuard(G);
-                gone = true;
-                break;
+                if (!pr.pierce) {
+                  gone = true;
+                  break;
+                }
               }
             }
           }
