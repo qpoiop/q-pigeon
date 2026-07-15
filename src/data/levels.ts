@@ -81,6 +81,14 @@ export const LEVELS: LevelDef[] = [
       { x: -10, z: -8, w: 12, d: 1.4 },
       { x: 12, z: -8, w: 10, d: 1.4 },
       { x: -6, z: 14, w: 1.4, d: 5 },
+      // denser corridors
+      { x: -20, z: 13, w: 1.4, d: 8 },
+      { x: 20, z: 13, w: 1.4, d: 8 },
+      { x: -18, z: 0, w: 8, d: 1.4 },
+      { x: 18, z: 0, w: 8, d: 1.4 },
+      { x: 0, z: -13, w: 12, d: 1.4 },
+      { x: -13, z: -14, w: 1.4, d: 6 },
+      { x: 13, z: -14, w: 1.4, d: 6 },
     ],
     covers: [
       { x: -27, z: 13, w: 3.5, d: 4 },
@@ -103,7 +111,9 @@ export const LEVELS: LevelDef[] = [
     guards: [
       { path: [[-18, 4], [18, 4]], speed: 2.2, range: 8 },
       { path: [[-20, -12], [-2, -12]], speed: 2.3, range: 8, type: 'radial' },
-      { path: [[20, -12], [5, -12], [5, -2]], speed: 2.3, range: 8 },
+      { path: [[20, -12], [5, -12], [5, -2]], speed: 2.3, range: 8, type: 'line' },
+      { path: [[-27, 12], [-27, -12]], speed: 2.1, range: 8, type: 'radial' },
+      { path: [[27, -12], [27, 12]], speed: 2.1, range: 8, type: 'line' },
     ],
   },
   {
@@ -154,6 +164,8 @@ export const LEVELS: LevelDef[] = [
       { path: [[30, 3], [-30, 3]], speed: 2.4, range: 8.5 },
       { path: [[-30, -5], [30, -5]], speed: 2.5, range: 8.5, type: 'radial' },
       { path: [[30, -13], [-30, -13]], speed: 2.5, range: 8.5 },
+      { path: [[-30, 19], [30, 19]], speed: 2.3, range: 8.5, type: 'radial' },
+      { path: [[30, -21], [-30, -21]], speed: 2.4, range: 8.5, type: 'line' },
     ],
   },
   {
@@ -207,6 +219,8 @@ export const LEVELS: LevelDef[] = [
       { path: [[40, 20], [40, -20]], speed: 2.6, range: 9 },
       { path: [[-15, 14], [-15, -14]], speed: 2.8, range: 9 },
       { path: [[15, 14], [15, -14]], speed: 2.8, range: 9, type: 'radial' },
+      { path: [[-40, 24], [40, 24]], speed: 2.6, range: 9, type: 'radial' },
+      { path: [[-40, -24], [40, -24]], speed: 2.6, range: 9, type: 'line' },
     ],
   },
   {
