@@ -63,6 +63,8 @@ export interface CharDef {
   combat: CombatDef;
   /** Unique active skill. */
   skill: SkillDef;
+  /** Hidden from character select (kept in CHARS so peer refs still resolve). */
+  disabled?: boolean;
 }
 
 export const CHARS: Record<CharId, CharDef> = {
@@ -91,6 +93,7 @@ export const CHARS: Record<CharId, CharDef> = {
     pal: { body: 0x17171a, head: 0x17171a, wing: 0xf3f2f2, accent: 0x18a6c4 },
     combat: { hp: 3, atk: 'melee', dmg: 2, range: 1.9, atkCd: 0.32 },
     skill: { id: 'backstab', name: '백어택', desc: '근처 적 배후로 대시해 강타', cd: 6, dmg: 4 },
+    disabled: true,
   },
   owl: {
     name: '부엉이',
@@ -102,8 +105,8 @@ export const CHARS: Record<CharId, CharDef> = {
     kind: 'owl',
     // warm tan/brown with an amber accent
     pal: { body: 0xcbb79a, head: 0xa2886a, wing: 0x6a5540, accent: 0xe0a021 },
-    combat: { hp: 4, atk: 'ranged', dmg: 2, range: 16, atkCd: 1.0, projSpeed: 26 },
-    skill: { id: 'snipe', name: '저격', desc: '조준 후 일직선 초고위력 저격', cd: 7, dmg: 6 },
+    combat: { hp: 4, atk: 'ranged', dmg: 2, range: 10, atkCd: 0.9, projSpeed: 30 },
+    skill: { id: 'snipe', name: '저격', desc: '누르는 만큼 충전 → 놓으면 그 경로로 저격', cd: 7, dmg: 6 },
   },
   sparrow: {
     name: '참새',
