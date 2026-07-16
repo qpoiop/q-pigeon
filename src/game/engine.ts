@@ -360,7 +360,7 @@ export class PigeonGame {
     }
     // procedural player birds read too large next to the (0.85) guards; the
     // skinned sparrow keeps its own normalised size.
-    p.group.scale.setScalar(p.mixer ? 1 : 0.82);
+    p.group.scale.setScalar(p.mixer ? 1 : 0.7);
     this.actorGroup.add(p.group);
     const sm = new THREE.Mesh(
       new THREE.SphereGeometry(1.1, 14, 10),
@@ -601,7 +601,7 @@ export class PigeonGame {
       const pg =
         birdModel('guard') ??
         makeBird({ body: 0x2b2825, head: 0x201e1d, wing: 0x171514, accent: 0xec3013 }, 'guard');
-      const gscale = 0.85 * (gd.scale ?? 1);
+      const gscale = 0.72 * (gd.scale ?? 1);
       pg.group.scale.setScalar(gscale);
       pg.group.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = false; // cut shadow-caster count
@@ -853,19 +853,21 @@ export class PigeonGame {
       this.combo +
       '</b> 연속</span><div class="cbar"><i></i></div>';
   }
-  /** Spawn `n` alerted reinforcement guards at map-edge free spots away from the player. */
+  /** Spawn `n` alerted reinforcements from the far (exit) end, so they stream in
+   *  from ahead and the player fights forward toward the exit. */
   private reinforce(n: number): void {
     const L = this.level;
     const P = this.player;
+    const ex = L.extract;
+    const dir = Math.sign(P.pos.y - ex[1]) || 1; // exit → player direction (down the corridor)
     for (let i = 0; i < n; i++) {
       let px = 0;
       let pz = 0;
       let ok = false;
       for (let tries = 0; tries < 30; tries++) {
-        const edge = Math.random() < 0.5;
-        px = edge ? (Math.random() < 0.5 ? -1 : 1) * (L.w / 2 - 3) : (Math.random() * 2 - 1) * (L.w / 2 - 3);
-        pz = edge ? (Math.random() * 2 - 1) * (L.d / 2 - 3) : (Math.random() < 0.5 ? -1 : 1) * (L.d / 2 - 3);
-        if (!this.inWall(px, pz, 0.6) && Math.hypot(px - P.pos.x, pz - P.pos.y) > 11) {
+        px = Math.max(-L.w / 2 + 2, Math.min(L.w / 2 - 2, ex[0] + (Math.random() * 2 - 1) * L.w * 0.42));
+        pz = ex[1] + dir * Math.random() * L.d * 0.16; // just inside the far end
+        if (!this.inWall(px, pz, 0.6) && Math.hypot(px - P.pos.x, pz - P.pos.y) > 9) {
           ok = true;
           break;
         }
