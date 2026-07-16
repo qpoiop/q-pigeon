@@ -1581,25 +1581,37 @@ export class PigeonGame {
   private skillBlink(): void {
     const P = this.player;
     const now = performance.now() / 1000;
-    const dist = 8 + 3 * (this.aug.dart || 0);
+    const sinf = Math.sin(P.facing);
+    const cosf = Math.cos(P.facing);
+    const want = 5 + 1.5 * (this.aug.dart || 0); // shorter charge distance
+    const reach = Math.min(want, this.wallDist(P.pos.x, P.pos.y, P.facing, want)); // stop at walls
     const sx = P.pos.x;
     const sz = P.pos.y;
-    const tx = sx + Math.sin(P.facing) * dist;
-    const tz = sz + Math.cos(P.facing) * dist;
-    for (let i = 1; i <= 14; i++) {
-      const px = sx + (tx - sx) * (i / 14);
-      const pz = sz + (tz - sz) * (i / 14);
+    const tx = sx + sinf * reach;
+    const tz = sz + cosf * reach;
+    for (let i = 1; i <= 12; i++) {
+      const px = sx + (tx - sx) * (i / 12);
+      const pz = sz + (tz - sz) * (i / 12);
       for (const G of this.guards)
-        if (!G.down && Math.hypot(G.pos.x - px, G.pos.y - pz) < 1.6)
+        if (!G.down && Math.hypot(G.pos.x - px, G.pos.y - pz) < 1.4)
           this.damageGuard(G, this.skillDmg());
     }
-    this.burst(sx, sz, ACCENT, 6);
+    // dash-path trail so you can see the route + which enemies it cut through
+    const trail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.06, reach),
+      new THREE.MeshBasicMaterial({ color: 0x18a6c4, transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    trail.rotation.y = P.facing;
+    trail.position.set(sx + (sinf * reach) / 2, 0.5, sz + (cosf * reach) / 2);
+    this.fxGroup.add(trail);
+    this.ghosts.push({ m: trail, t: 0.32 });
+    this.burst(sx, sz, 0x18a6c4, 6);
     P.pos.set(tx, tz);
     this.collide(P.pos, 0.5, true);
-    this.burst(P.pos.x, P.pos.y, ACCENT, 8);
+    this.burst(P.pos.x, P.pos.y, 0x18a6c4, 10);
     this.dashT = now;
-    this.addShake(0.22);
-    this.kickZoom(1.1);
+    this.addShake(0.2);
+    this.kickZoom(1.0);
     this.sfx.dash();
   }
 
