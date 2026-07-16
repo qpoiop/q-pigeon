@@ -22,6 +22,8 @@ export const TPL =
   '  <div class="pg-objective"></div>' +
   '  <div class="pg-toast"></div>' +
   '  <div class="pg-bossban"></div>' +
+  '  <div class="pg-score">SCORE 0</div>' +
+  '  <div class="pg-combo"></div>' +
   ' </div>' +
   ' <div class="pg-drawer">' +
   '  <div class="pg-dr-hd"><span class="k">Mission file</span><button class="pg-dr-x">닫기 ✕</button></div>' +
@@ -79,6 +81,17 @@ export const CSS =
   '.pg-bossban .t{font:900 clamp(30px,7vw,56px)/1 inherit;letter-spacing:.02em;color:#f3f2f2;text-shadow:0 2px 12px rgba(0,0,0,.6),0 0 2px #ec3013;-webkit-text-stroke:1.5px #201e1d}' +
   '.pg-bossban .d{font:700 12px/1.4 inherit;color:#f3f2f2;text-shadow:0 1px 4px rgba(0,0,0,.7);max-width:80%}' +
   '@keyframes pgboss{0%{opacity:0;transform:scale(1.3)}12%{opacity:1;transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(.96)}}' +
+  // arena score (top-center) + combo/style meter (right)
+  '.pg-score{position:absolute;top:40px;left:50%;transform:translateX(-50%);font:800 14px/1 inherit;letter-spacing:.14em;color:#201e1d;background:rgba(243,242,242,.85);border:2px solid #201e1d;padding:5px 13px;pointer-events:none;z-index:9}' +
+  '.pg-combo{position:absolute;top:34%;right:16px;display:none;flex-direction:column;align-items:flex-end;gap:3px;pointer-events:none;z-index:9}' +
+  '.pg-combo.show{display:flex}' +
+  '.pg-combo .r{font:900 clamp(36px,8vw,64px)/.85 inherit;color:#ec3013;-webkit-text-stroke:2px #201e1d;text-shadow:0 3px 10px rgba(0,0,0,.35)}' +
+  '.pg-combo.rS .r{color:#e0a021}' +
+  '.pg-combo.rA .r{color:#ff5a2b}' +
+  '.pg-combo .x{font:800 15px/1 inherit;color:#201e1d}' +
+  '.pg-combo .x b{color:#ec3013;font-size:22px}' +
+  '.pg-combo .cbar{width:118px;height:6px;background:rgba(32,30,29,.18);border:1.5px solid #201e1d;overflow:hidden}' +
+  '.pg-combo .cbar i{display:block;height:100%;width:100%;background:#ec3013}' +
   // acquired-augment HUD strip (bottom-left)
   '.pg-augs{position:absolute;left:10px;bottom:12px;display:none;flex-direction:column;gap:4px;pointer-events:none;max-width:168px;z-index:9}' +
   '.pg-augs.show{display:flex}' +
