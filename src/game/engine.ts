@@ -99,6 +99,8 @@ export class PigeonGame {
   private orbiters: { mesh: THREE.Mesh; ang: number; life: number; hitT: number }[] = [];
   private aiming = false;
   private aimLine!: THREE.Mesh;
+  private aimFill!: THREE.Mesh;
+  private aimT = 0;
 
   // shared squad alarm — most recent known player location (for coordinated search)
   private alarmX = 0;
@@ -289,10 +291,17 @@ export class PigeonGame {
     // owl aim line (hold-to-aim sniper skill); box along local Z, clipped at walls
     this.aimLine = new THREE.Mesh(
       new THREE.BoxGeometry(0.5, 0.05, 1),
-      new THREE.MeshBasicMaterial({ color: 0xe0a021, transparent: true, opacity: 0.4, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: 0xe0a021, transparent: true, opacity: 0.22, depthWrite: false }),
     );
     this.aimLine.visible = false;
     this.fxGroup.add(this.aimLine);
+    // bright charge fill that grows along the aim line as you hold
+    this.aimFill = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.06, 1),
+      new THREE.MeshBasicMaterial({ color: 0xec3013, transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    this.aimFill.visible = false;
+    this.fxGroup.add(this.aimFill);
 
     this.spawnPlayer();
     this.peersMeshes = {};
@@ -1131,8 +1140,17 @@ export class PigeonGame {
     this.sfx.ensure();
     if (cb.atk === 'ranged') {
       this.spawnProjectile(P.pos.x, P.pos.y, P.facing, cb.dmg, cb.projSpeed ?? 24, false);
-      // muzzle flash so the shot reads clearly
+      // muzzle flash + a fading tracer streak so the shot reads (not just a dot)
       this.burst(P.pos.x + Math.sin(P.facing) * 0.9, P.pos.y + Math.cos(P.facing) * 0.9, 0x18a6c4, 8);
+      const tl = Math.min(cb.range, this.wallDist(P.pos.x, P.pos.y, P.facing, cb.range));
+      const tr = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.05, tl),
+        new THREE.MeshBasicMaterial({ color: 0x18a6c4, transparent: true, opacity: 0.5, depthWrite: false }),
+      );
+      tr.rotation.y = P.facing;
+      tr.position.set(P.pos.x + (Math.sin(P.facing) * tl) / 2, 0.7, P.pos.y + (Math.cos(P.facing) * tl) / 2);
+      this.fxGroup.add(tr);
+      this.ghosts.push({ m: tr, t: 0.18 });
       this.addShake(0.09);
       this.kickZoom(0.5);
       this.sfx.dash();
@@ -1253,14 +1271,17 @@ export class PigeonGame {
     if (this.mode !== 'play' || this.player.downed) return;
     const sk = CHARS[this.charId].skill;
     if (performance.now() / 1000 - this.player.skillT < this.skillCd()) return; // on cooldown
-    if (sk.id === 'snipe') this.aiming = true;
-    else this.skill();
+    if (sk.id === 'snipe') {
+      this.aiming = true;
+      this.aimT = 0; // start charging
+    } else this.skill();
   }
 
-  /** Skill button release: fire the held (owl) snipe shot. */
+  /** Skill button release: fire the held (owl) snipe shot along the charged path. */
   private skillRelease(): void {
     if (!this.aiming) return;
     this.aiming = false;
+    this.aimFill.visible = false;
     this.aimLine.visible = false;
     this.$('.pg-b-skill').classList.remove('aim');
     this.skill();
@@ -1339,11 +1360,12 @@ export class PigeonGame {
     this.sfx.dash();
   }
 
-  /** 부엉이: a long hitscan snipe beam dealing heavy damage along the aim. */
+  /** 부엉이: a charged hitscan snipe — reach + damage scale with how long it was held. */
   private skillSnipe(): void {
     const P = this.player;
-    const range = 12 + 4 * (this.aug.snipe || 0);
-    const dmg = this.skillDmg() + 4;
+    const charge = Math.max(0.25, this.aimT); // released early = weaker/shorter
+    const range = (12 + 4 * (this.aug.snipe || 0)) * charge;
+    const dmg = Math.round((this.skillDmg() + 4) * (0.4 + 0.6 * charge));
     const sinf = Math.sin(P.facing);
     const cosf = Math.cos(P.facing);
     const reach = Math.min(range, this.wallDist(P.pos.x, P.pos.y, P.facing, range));
@@ -1356,8 +1378,13 @@ export class PigeonGame {
       if (Math.abs(rx * cosf - rz * sinf) < 1.1) this.damageGuard(G, dmg); // perpendicular dist
     }
     const beam = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, 0.05, reach),
-      new THREE.MeshBasicMaterial({ color: 0xe0a021, transparent: true, opacity: 0.9, depthWrite: false }),
+      new THREE.BoxGeometry(0.22 + 0.14 * charge, 0.05, reach),
+      new THREE.MeshBasicMaterial({
+        color: charge >= 0.999 ? 0xec3013 : 0xe0a021,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      }),
     );
     beam.position.set(P.pos.x + (sinf * reach) / 2, 0.5, P.pos.y + (cosf * reach) / 2);
     beam.rotation.y = P.facing;
@@ -1754,9 +1781,12 @@ export class PigeonGame {
     this.buildLevel(0);
     this.toggleDrawer(false);
 
+    // a disabled selection would strand the player — fall back to the first live one
+    if (CHARS[this.charId]?.disabled) this.charId = CHAR_ORDER.find((c) => !CHARS[c].disabled)!;
     let charBtns = '';
     for (const cid of CHAR_ORDER) {
       const C = CHARS[cid];
+      if (C.disabled) continue;
       charBtns +=
         '<button class="pg-char' +
         (cid === this.charId ? ' sel' : '') +
@@ -1923,7 +1953,9 @@ export class PigeonGame {
 
   private startStage(idx: number): void {
     this.aiming = false;
+    this.aimT = 0;
     if (this.aimLine) this.aimLine.visible = false;
+    if (this.aimFill) this.aimFill.visible = false;
     if (idx === 0) this.aug = {}; // fresh run — clear augments
     this.$('.pg-install').classList.remove('show');
     this.buildLevel(idx);
@@ -2556,21 +2588,30 @@ export class PigeonGame {
             this.arrow.rotation.y = Math.atan2(atx - P.pos.x, atz - P.pos.y);
           } else this.arrow.visible = false;
         }
-        // owl hold-to-aim: a line from the player, clipped at the first wall ahead
+        // owl snipe: hold to charge — a dim guide to the wall + a bright fill that
+        // grows along it as the gauge charges. Release fires as far as it filled.
         if (this.aiming) {
-          const len = this.wallDist(P.pos.x, P.pos.y, P.facing, 16);
+          this.aimT = Math.min(1, this.aimT + dt / 1.1);
+          const sinf = Math.sin(P.facing);
+          const cosf = Math.cos(P.facing);
+          const maxR = 12 + 4 * (this.aug.snipe || 0);
+          const guide = this.wallDist(P.pos.x, P.pos.y, P.facing, maxR);
           this.aimLine.visible = true;
-          this.aimLine.scale.set(0.5, 1, len);
+          this.aimLine.scale.set(0.5, 1, guide);
           this.aimLine.rotation.y = P.facing;
-          this.aimLine.position.set(
-            P.pos.x + (Math.sin(P.facing) * len) / 2,
-            0.12,
-            P.pos.y + (Math.cos(P.facing) * len) / 2,
-          );
-          (this.aimLine.material as THREE.MeshBasicMaterial).opacity = 0.32 + 0.3 * Math.abs(Math.sin(t * 12));
+          this.aimLine.position.set(P.pos.x + (sinf * guide) / 2, 0.12, P.pos.y + (cosf * guide) / 2);
+          const fillLen = Math.max(0.4, guide * this.aimT);
+          this.aimFill.visible = true;
+          this.aimFill.scale.set(0.7, 1, fillLen);
+          this.aimFill.rotation.y = P.facing;
+          this.aimFill.position.set(P.pos.x + (sinf * fillLen) / 2, 0.14, P.pos.y + (cosf * fillLen) / 2);
+          const fm = this.aimFill.material as THREE.MeshBasicMaterial;
+          fm.color.setHex(this.aimT >= 0.999 ? 0xec3013 : 0xe0a021);
+          fm.opacity = 0.6 + 0.3 * Math.abs(Math.sin(t * 14));
           this.$<HTMLElement>('.pg-b-skill').classList.add('aim');
-        } else if (this.aimLine.visible) {
+        } else if (this.aimLine.visible || this.aimFill.visible) {
           this.aimLine.visible = false;
+          this.aimFill.visible = false;
           this.$<HTMLElement>('.pg-b-skill').classList.remove('aim');
         }
         let maxDetect = 0;
