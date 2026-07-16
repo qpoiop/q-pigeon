@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { INK, BG, ACCENT, MID, PAPER } from '../data/palette';
 import { CHARS, CHAR_ORDER, type CharId } from '../data/characters';
 import { DIFFS, DIFF_ORDER, type DiffId } from '../data/difficulties';
-import { LEVELS, type LevelDef } from '../data/levels';
+import { LEVELS, type LevelDef, type GuardSpawn } from '../data/levels';
 import { genLevel, STAGE_GEN } from '../data/mapgen';
 import { AUGMENTS, poolFor, augDef, type AugId } from '../data/augments';
 import { Sfx } from './audio';
@@ -47,6 +47,20 @@ const GSTATES: GuardState[] = ['patrol', 'chase', 'lured', 'search'];
 
 /** Boss spread-shot bullet angles (offset from facing); telegraph lines match. */
 const BOSS_SPREAD = [-0.6, -0.3, 0, 0.3, 0.6];
+
+/** Enemy classes used for arena reinforcement waves. */
+const REINFORCE_CLASSES: {
+  hp: number;
+  speed: number;
+  range: number;
+  type: 'radial' | 'line';
+  scale: number;
+  tint: number;
+}[] = [
+  { hp: 2, speed: 3.0, range: 7, type: 'radial', scale: 0.95, tint: 0x3fae6b },
+  { hp: 3, speed: 2.4, range: 8.5, type: 'line', scale: 1.1, tint: 0x8a8683 },
+  { hp: 5, speed: 1.7, range: 8, type: 'radial', scale: 1.35, tint: 0xec3013 },
+];
 
 type Mode = 'menu' | 'brief' | 'play' | 'fail' | 'clear';
 
@@ -102,6 +116,15 @@ export class PigeonGame {
   private aimFill!: THREE.Mesh;
   private aimT = 0;
   private frameN = 0;
+  // score/combo arena state
+  private combo = 0;
+  private comboT = 0;
+  private score = 0;
+  private kills = 0;
+  private killQuota = 0;
+  private waveT = 0;
+  private static readonly COMBO_WINDOW = 3.2;
+  private static readonly WAVE_INTERVAL = 4.5;
 
   // shared squad alarm — most recent known player location (for coordinated search)
   private alarmX = 0;
@@ -567,9 +590,14 @@ export class PigeonGame {
       this.levelGroup.add(ring);
     }
 
+    for (const gd of L.guards) this.spawnGuard(gd);
+    this.finishBuild(L);
+  }
+
+  /** Build one guard from a spawn def, add it to the scene + guard list, return it. */
+  private spawnGuard(gd: GuardSpawn): Guard {
     const D = DIFFS[this.diffId];
-    for (let gI = 0; gI < L.guards.length; gI++) {
-      const gd = L.guards[gI];
+    {
       const pg =
         birdModel('guard') ??
         makeBird({ body: 0x2b2825, head: 0x201e1d, wing: 0x171514, accent: 0xec3013 }, 'guard');
@@ -636,7 +664,7 @@ export class PigeonGame {
       pg.group.add(hpbar);
       const gtype = gd.type ?? 'radial';
       const ghp = gd.hp ?? 3;
-      this.guards.push({
+      const g: Guard = {
         model: pg,
         cone,
         bang,
@@ -679,9 +707,14 @@ export class PigeonGame {
         qmark,
         aimX: 0,
         aimZ: 0,
-      });
+      };
+      this.guards.push(g);
+      return g;
     }
+  }
 
+  /** Finish level build after guards: boss + player reset + HUD. */
+  private finishBuild(L: LevelDef): void {
     // boss (final stage): a large commander with 3 telegraphed attack patterns
     if (L.boss) {
       const bm =
@@ -764,6 +797,14 @@ export class PigeonGame {
     this.filmCount = 0;
     this.stageTime = 0;
     this.spotted = 0;
+    // arena: combo resets per floor; kill quota scales with the stage
+    this.combo = 0;
+    this.comboT = 0;
+    this.kills = 0;
+    this.waveT = PigeonGame.WAVE_INTERVAL;
+    this.killQuota = this.boss ? 0 : 14 + this.stageIdx * 8;
+    this.updCombo();
+    this.updScore();
     const mpc = this.$<HTMLCanvasElement>('.pg-map');
     if (mpc) {
       mpc.width = 150;
@@ -786,8 +827,63 @@ export class PigeonGame {
       this.$('.pg-films').innerHTML = '보스전';
       return;
     }
-    const alive = this.guards.reduce((n, g) => n + (g.down ? 0 : 1), 0);
-    this.$('.pg-films').innerHTML = '적 <b>' + alive + '</b>';
+    this.$('.pg-films').innerHTML = '처치 <b>' + this.kills + '</b>/' + this.killQuota;
+  }
+
+  /* ---------- Arena: score / combo / waves ---------- */
+  private styleRank(): string {
+    const c = this.combo;
+    return c >= 16 ? 'S' : c >= 11 ? 'A' : c >= 7 ? 'B' : c >= 4 ? 'C' : 'D';
+  }
+  private updScore(): void {
+    this.$('.pg-score').textContent = 'SCORE ' + this.score.toLocaleString();
+  }
+  private updCombo(): void {
+    const el = this.$<HTMLElement>('.pg-combo');
+    if (this.combo < 2) {
+      el.classList.remove('show');
+      return;
+    }
+    const r = this.styleRank();
+    el.className = 'pg-combo show r' + r;
+    el.innerHTML =
+      '<span class="r">' +
+      r +
+      '</span><span class="x"><b>' +
+      this.combo +
+      '</b> 연속</span><div class="cbar"><i></i></div>';
+  }
+  /** Spawn `n` alerted reinforcement guards at map-edge free spots away from the player. */
+  private reinforce(n: number): void {
+    const L = this.level;
+    const P = this.player;
+    for (let i = 0; i < n; i++) {
+      let px = 0;
+      let pz = 0;
+      let ok = false;
+      for (let tries = 0; tries < 30; tries++) {
+        const edge = Math.random() < 0.5;
+        px = edge ? (Math.random() < 0.5 ? -1 : 1) * (L.w / 2 - 3) : (Math.random() * 2 - 1) * (L.w / 2 - 3);
+        pz = edge ? (Math.random() * 2 - 1) * (L.d / 2 - 3) : (Math.random() < 0.5 ? -1 : 1) * (L.d / 2 - 3);
+        if (!this.inWall(px, pz, 0.6) && Math.hypot(px - P.pos.x, pz - P.pos.y) > 11) {
+          ok = true;
+          break;
+        }
+      }
+      if (!ok) continue;
+      const k = REINFORCE_CLASSES[Math.floor(Math.random() * REINFORCE_CLASSES.length)];
+      const g = this.spawnGuard({
+        path: [[px, pz]],
+        speed: k.speed,
+        range: k.range,
+        type: k.type,
+        hp: k.hp,
+        scale: k.scale,
+        tint: k.tint,
+      });
+      g.aggro = 2.5; // arrive already hunting
+      this.burst(px, pz, 0xec3013, 14);
+    }
   }
   private toast(msg: string): void {
     const el = this.$('.pg-toast');
@@ -1489,8 +1585,24 @@ export class PigeonGame {
     G.hpbar.visible = false;
     G.model.group.rotation.z = Math.PI / 2;
     G.model.group.position.y = 0.15;
-    this.burst(G.pos.x, G.pos.y, 0x8a8683, 8);
-    this.updFilms(); // refresh the "enemies remaining" counter
+    // arena: chain kills → combo + score, with escalating impact juice
+    if (this.mode === 'play' && !this.boss) {
+      this.combo++;
+      this.comboT = PigeonGame.COMBO_WINDOW;
+      this.kills++;
+      this.score += 10 * this.combo;
+      this.updCombo();
+      this.updScore();
+      this.updFilms();
+      // punchier the higher the combo: hit-stop, shake, kill burst
+      this.freeze(Math.min(0.16, 0.05 + this.combo * 0.006));
+      this.addShake(Math.min(0.5, 0.16 + this.combo * 0.02));
+      this.burst(G.pos.x, G.pos.y, 0xec3013, 10 + Math.min(18, this.combo * 2));
+      this.burst(G.pos.x, G.pos.y, 0xffffff, 6);
+    } else {
+      this.burst(G.pos.x, G.pos.y, 0x8a8683, 8);
+      this.updFilms();
+    }
     this.sfx.pickup();
   }
 
@@ -1967,7 +2079,10 @@ export class PigeonGame {
     this.aimT = 0;
     if (this.aimLine) this.aimLine.visible = false;
     if (this.aimFill) this.aimFill.visible = false;
-    if (idx === 0) this.aug = {}; // fresh run — clear augments
+    if (idx === 0) {
+      this.aug = {}; // fresh run — clear augments
+      this.score = 0;
+    }
     this.$('.pg-install').classList.remove('show');
     this.buildLevel(idx);
     this.updAugs();
@@ -2214,6 +2329,9 @@ export class PigeonGame {
         '<li><b>발각</b><span>' +
         this.spotted +
         '회</span></li>' +
+        '<li><b>점수</b><span>' +
+        this.score.toLocaleString() +
+        '</span></li>' +
         '</ul>' +
         cards +
         '</div>' +
@@ -2543,27 +2661,46 @@ export class PigeonGame {
             }
           }
         }
-        // clear = defeat every guard, then reach the exit DOOR (which unlocks +
-        // opens once the last guard falls). Boss stages win on boss HP instead.
+        // arena: chain-kill a quota under wave pressure, then reach the exit door
         const ex = this.level.extract;
         const inExit = (ax: number, az: number) =>
           Math.abs(ax - ex[0]) < ex[2] / 2 && Math.abs(az - ex[1]) < ex[3] / 2;
+        // combo decay + live meter
+        if (this.combo > 0) {
+          this.comboT -= dt;
+          const bar = this.host.querySelector<HTMLElement>('.pg-combo .cbar i');
+          if (bar) bar.style.width = Math.max(0, (this.comboT / PigeonGame.COMBO_WINDOW) * 100) + '%';
+          if (this.comboT <= 0) {
+            this.combo = 0;
+            this.updCombo();
+          }
+        }
         if (!this.boss) {
           let alive = 0;
           for (const g of this.guards) if (!g.down) alive++;
-          const open = alive === 0;
+          const quotaMet = this.kills >= this.killQuota;
+          // reinforcement waves until the quota is reached (host/solo only)
+          if (!quotaMet && this.net.role() !== 'guest') {
+            this.waveT -= dt;
+            if (this.waveT <= 0) {
+              this.waveT = PigeonGame.WAVE_INTERVAL;
+              if (alive < 9) this.reinforce(2 + Math.min(2, this.stageIdx));
+            }
+          }
+          const open = quotaMet;
           if (open && !this.doorOpen) this.sfx.clear();
           this.doorOpen = open;
           (this.extractMesh.material as THREE.MeshBasicMaterial).opacity = open
             ? 0.8 + Math.sin(t * 6) * 0.2
             : 0.32;
           if (open) {
-            this.$('.pg-objective').textContent = '탈출구 개방 — 문으로 탈출하라';
+            this.$('.pg-objective').textContent = '쿼터 달성 — 탈출구로 이동하라';
             const atExit =
               (!P.downed && inExit(P.pos.x, P.pos.y)) || (!!gp && inExit(gp.x, gp.z));
             if (atExit && this.mode === 'play' && this.net.role() !== 'guest') this.clearStage();
           } else {
-            this.$('.pg-objective').textContent = '목표 — 적 전원 제압 · 남은 적 ' + alive;
+            this.$('.pg-objective').textContent =
+              '처치 ' + this.kills + '/' + this.killQuota + ' · 연속 처치로 점수↑';
           }
         }
         // door leaf slides up when the exit unlocks
