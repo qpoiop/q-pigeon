@@ -567,7 +567,7 @@ export class PigeonGame {
       const pg =
         birdModel('guard') ??
         makeBird({ body: 0x2b2825, head: 0x201e1d, wing: 0x171514, accent: 0xec3013 }, 'guard');
-      const gscale = 1.12 * (gd.scale ?? 1);
+      const gscale = 0.85 * (gd.scale ?? 1);
       pg.group.scale.setScalar(gscale);
       this.levelGroup.add(pg.group);
       // class tint ring under the guard so enemy types read apart at a glance
